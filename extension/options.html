@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Badzy — Extension settings</title>
+<style>
+  :root { color-scheme: dark; --bg:#09090c; --panel:#121218; --panel2:#18181f; --line:#2b2a33; --text:#f5f3f4; --muted:#a5a0a7; --red:#ff4054; --red2:#e92d45; --green:#42d392; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; padding:34px 22px 48px; background:radial-gradient(ellipse at 80% 0%, #261017 0, transparent 42%),var(--bg); color:var(--text); font:14px/1.5 "Segoe UI",system-ui,sans-serif; }
+  .wrap { max-width:760px; margin:0 auto; animation:in .2s ease-out both; }
+  @keyframes in { from { opacity:0; transform:translateY(7px); } to { opacity:1; transform:translateY(0); } }
+  @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms!important; transition-duration:.01ms!important; } }
+  header { display:flex; align-items:center; gap:14px; margin-bottom:25px; }
+  header img { width:46px; height:46px; filter:drop-shadow(0 5px 14px #ff405425); }
+  h1 { margin:0; font-size:24px; letter-spacing:-.6px; }
+  .subtitle { margin:3px 0 0; color:var(--muted); font-size:12px; }
+  .status { margin-left:auto; display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; }
+  .dot { width:8px; height:8px; border-radius:50%; background:#7a7580; }
+  .status.on .dot { background:var(--green); box-shadow:0 0 0 4px #42d39216; }
+  .hero { border:1px solid #4b202a; border-radius:16px; padding:18px 20px; background:linear-gradient(120deg,#211016,#131218 72%); margin-bottom:14px; }
+  .hero strong { display:block; font-size:15px; }
+  .hero p { color:var(--muted); margin:5px 0 0; font-size:12px; }
+  .card { border:1px solid var(--line); border-radius:15px; background:var(--panel); overflow:hidden; margin-bottom:13px; }
+  .card-head { padding:16px 18px 12px; border-bottom:1px solid var(--line); }
+  h2 { margin:0; font-size:13px; letter-spacing:.02em; }
+  .card-head p { color:var(--muted); margin:4px 0 0; font-size:11.5px; }
+  .setting { display:flex; align-items:center; gap:15px; padding:15px 18px; }
+  .setting + .setting { border-top:1px solid #24232b; }
+  .setting-copy { min-width:0; flex:1; }
+  .setting-copy label,.setting-copy strong { display:block; font-weight:650; }
+  .setting-copy small { display:block; margin-top:3px; color:var(--muted); font-size:11.5px; }
+  input[type=number] { width:136px; height:37px; padding:0 10px; color:var(--text); background:#0c0c11; border:1px solid #38353f; border-radius:9px; font:inherit; }
+  input[type=range] { width:180px; accent-color:var(--red); }
+  output { min-width:42px; color:var(--text); font-size:12px; text-align:right; font-variant-numeric:tabular-nums; }
+  .range-control { display:flex; align-items:center; gap:10px; }
+  .switch { position:relative; flex:none; width:42px; height:24px; }
+  .switch input { position:absolute; width:1px; height:1px; opacity:0; }
+  .knob { position:absolute; inset:0; border:1px solid #3b3943; border-radius:999px; background:#2a2932; cursor:pointer; transition:background .17s,border-color .17s; }
+  .knob::before { content:""; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#b8b3bb; transition:transform .17s,background .17s; }
+  .switch input:checked + .knob { background:var(--red2); border-color:var(--red); }
+  .switch input:checked + .knob::before { transform:translateX(18px); background:#fff; }
+  .switch input:focus-visible + .knob { outline:2px solid var(--red); outline-offset:3px; }
+  button { height:35px; padding:0 13px; color:#fff; background:var(--red2); border:0; border-radius:9px; font:inherit; font-weight:700; cursor:pointer; transition:transform .15s,background .15s; }
+  button:hover { background:var(--red); transform:translateY(-1px); }
+  button:focus-visible,input:focus-visible { outline:2px solid var(--red); outline-offset:2px; }
+  .saved { min-height:22px; padding:3px 2px; color:var(--green); font-size:12px; }
+  .saved.error { color:#ff8997; }
+  .footnote { color:var(--muted); font-size:11px; margin:10px 2px 0; }
+  @media(max-width:540px) { body { padding:20px 13px; } .setting { align-items:flex-start; flex-wrap:wrap; } .setting > :last-child { margin-left:0; } input[type=range] { width:150px; } .status { font-size:0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="icons/icon48.png" alt="">
+    <div><h1>Badzy <span style="color:var(--red)">/</span> Settings</h1><p class="subtitle">Tune the browser integration to your workflow.</p></div>
+    <div class="status" id="status" role="status"><span class="dot"></span><span id="statusText">Checking desktop app…</span></div>
+  </header>
+  <section class="hero"><strong>One app. Every download.</strong><p>Browser downloads and supported video streams are handed to the Badzy desktop app running locally on your PC. No account or cloud relay needed.</p></section>
+  <section class="card">
+    <div class="card-head"><h2>Download behavior</h2><p>Choose which features Badzy controls in your browser.</p></div>
+    <div class="setting">
+      <div class="setting-copy"><label for="intercept">Send browser downloads to Badzy</label><small>When disabled, regular browser downloads stay in Chrome / Edge / Firefox. Explicit quick-add actions are paused by the main integration toggle.</small></div>
+      <label class="switch" aria-label="Send browser downloads to Badzy"><input type="checkbox" id="intercept"><span class="knob"></span></label>
+    </div>
+    <div class="setting">
+      <div class="setting-copy"><label for="minSize">Ignore small files</label><small>Leave files below this size to the browser. Set to 0 to capture all sizes.</small></div>
+      <div><input type="number" id="minSize" min="0" max="104857600" step="1" inputmode="numeric" aria-describedby="minSizeUnit"><small id="minSizeUnit" style="display:block;color:var(--muted);text-align:right;margin-top:4px">kilobytes</small></div>
+    </div>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>Connection</h2><p>The extension talks to the desktop app through a loopback-only local API.</p></div>
+    <div class="setting">
+      <div class="setting-copy"><label for="port">Local app port</label><small>Default: 9614. Change this only when the desktop app is configured to use another port.</small></div>
+      <input type="number" id="port" min="1024" max="65535" step="1" aria-label="Local app port">
+    </div>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>On-page video button</h2><p>Customize the floating download controls shown on supported pages.</p></div>
+    <div class="setting">
+      <div class="setting-copy"><label for="bubbleScale">Button size</label><small>Adjust the controls for your screen and the website layout.</small></div>
+      <div class="range-control"><input type="range" id="bubbleScale" min="50" max="200" step="5" value="100"><output id="bubbleScaleText" for="bubbleScale">100%</output></div>
+    </div>
+  </section>
+  <div class="saved" id="saved" role="status" aria-live="polite"></div>
+  <p class="footnote">Tip: open the Badzy popup and use <b>Quick action</b> to send a normal web URL or a magnet link directly to the app.</p>
+</div>
+<script src="options.js"></script>
+</body>
+</html>
