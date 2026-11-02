@@ -1,0 +1,6 @@
+target/
+dist/
+build-cache/
+xpi-out/
+signing/
+*.pfx

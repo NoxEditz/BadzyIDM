@@ -3,7 +3,8 @@
 # Badzy.exe, gets ffmpeg + yt-dlp and makes dist\Badzy-Setup.exe.
 
 $ErrorActionPreference = "Stop"
-Set-Location -Path $PSScriptRoot
+$Root = Split-Path -Parent $PSScriptRoot
+Set-Location -Path $Root
 
 function Step($text) { Write-Host ""; Write-Host "==> $text" -ForegroundColor Cyan }
 function Fail($text) {
@@ -56,7 +57,7 @@ rustup default stable-msvc | Out-Null
 cargo --version
 
 # the version comes from Cargo.toml ([workspace.package] version = "...")
-$version = ([regex]::Match((Get-Content (Join-Path $PSScriptRoot "Cargo.toml") -Raw), '(?m)^version\s*=\s*"([^"]+)"')).Groups[1].Value
+$version = ([regex]::Match((Get-Content (Join-Path $Root "Cargo.toml") -Raw), '(?m)^version\s*=\s*"([^"]+)"')).Groups[1].Value
 if (-not $version) { $version = "1.0.0" }
 Write-Host "Version $version"
 
@@ -73,8 +74,8 @@ if ($LASTEXITCODE -ne 0) { Fail "The build failed. Scroll up to see the first re
 # first in build-cache\stage, which is not part of the result:
 #   Badzy.exe, tools\yt-dlp.exe + ffmpeg.exe, extension, extension-firefox
 Step "Preparing the files for the setup"
-$dist = Join-Path $PSScriptRoot "dist"
-$cache = Join-Path $PSScriptRoot "build-cache"
+$dist = Join-Path $Root "dist"
+$cache = Join-Path $Root "build-cache"
 $stage = Join-Path $cache "stage"
 $tools = Join-Path $stage "tools"
 if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
@@ -114,16 +115,16 @@ function Assert-Sha256($file, $sumsUrl, $name) {
     }
 }
 # ffmpeg: our own small build (tools\ffmpeg\build.sh; GitHub builds it for
-# every release). A ready one in tools\ffmpeg\win64 is used when it is there;
+# every release). A ready one in build-cache\ffmpeg is used when it is there;
 # the big public build of earlier versions is not used any more.
-$ours = Join-Path $PSScriptRoot "tools\ffmpeg\win64"
+$ours = Join-Path $Root "build-cache\ffmpeg"
 if (Test-Path "$ours\ffmpeg.exe") {
     foreach ($f in @("ffmpeg.exe", "ffmpeg-LICENSE.txt", "lame-COPYING.txt", "ffmpeg-version.txt")) {
         if (Test-Path "$ours\$f") { Copy-Item "$ours\$f" $cache -Force }
     }
 } elseif ((Test-Path "$cache\ffmpeg.exe") -and ((Get-Item "$cache\ffmpeg.exe").Length -gt 20MB)) {
     Remove-Item "$cache\ffmpeg.exe", "$cache\ffmpeg-version.txt" -Force -ErrorAction SilentlyContinue
-    Write-Host "The old big ffmpeg was removed. Put our small ffmpeg.exe in tools\ffmpeg\win64 (it comes with the source zip, or from a GitHub build)." -ForegroundColor Yellow
+    Write-Host "The old big ffmpeg was removed. Put our small ffmpeg.exe in build-cache\ffmpeg (it comes with the source zip, or from a GitHub build)." -ForegroundColor Yellow
 }
 if (-not (Test-Path "$cache\yt-dlp.exe")) {
     Step "Downloading yt-dlp (finds the links of videos)"
@@ -160,7 +161,7 @@ New-Item -ItemType Directory -Force $redist | Out-Null
 if (Test-Path "$cache\vc_redist.x64.exe") { Copy-Item "$cache\vc_redist.x64.exe" $redist -Force }
 Copy-Item "THIRD-PARTY-NOTICES.txt" $stage -Force
 # the Firefox add-on signed by Mozilla for this version (stays in Firefox for good)
-$extVersion = (Get-Content (Join-Path $PSScriptRoot "extension\manifest.firefox.json") -Raw | ConvertFrom-Json).version
+$extVersion = (Get-Content (Join-Path $Root "extension\manifest.firefox.json") -Raw | ConvertFrom-Json).version
 $signedXpi = "extension-signed\badzy-firefox-$extVersion.xpi"
 if (Test-Path $signedXpi) { Copy-Item $signedXpi (Join-Path $stage "badzy-firefox.xpi") -Force }
 foreach ($f in @("ffmpeg.exe", "yt-dlp.exe", "ffmpeg-version.txt", "ffmpeg-LICENSE.txt", "lame-COPYING.txt", "aria2c.exe", "aria2-COPYING.txt")) {
@@ -171,7 +172,7 @@ foreach ($f in @("ffmpeg.exe", "yt-dlp.exe", "ffmpeg-version.txt", "ffmpeg-LICEN
 # With a code signing certificate antivirus programs and Windows SmartScreen
 # trust the program. Put it in signing\badzy.pfx and its password in
 # signing\password.txt - everything is then signed automatically.
-$pfx = Join-Path $PSScriptRoot "signing\badzy.pfx"
+$pfx = Join-Path $Root "signing\badzy.pfx"
 $signtool = $null
 if (Test-Path $pfx) {
     $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
@@ -179,7 +180,7 @@ if (Test-Path $pfx) {
 }
 function Sign-File($file) {
     if (-not $signtool) { return }
-    $pw = (Get-Content (Join-Path $PSScriptRoot "signing\password.txt") -Raw).Trim()
+    $pw = (Get-Content (Join-Path $Root "signing\password.txt") -Raw).Trim()
     & $signtool sign /fd SHA256 /f $pfx /p $pw /tr "http://timestamp.digicert.com" /td SHA256 /d "Badzy" $file | Out-Null
     if ($LASTEXITCODE -eq 0) { Write-Host "Signed $file" } else { Write-Host "Could not sign $file" -ForegroundColor Yellow }
 }
@@ -210,7 +211,7 @@ if ($iscc) {
     # installer's own icon.
     $out = Join-Path $env:TEMP "badzy-setup-build"
     New-Item -ItemType Directory -Force $out | Out-Null
-    $iss = Join-Path $PSScriptRoot "installer\badzy.iss"
+    $iss = Join-Path $Root "installer\badzy.iss"
     $ok = $false
     foreach ($extra in @("", "", "/DNoIcon")) {
         Remove-Item (Join-Path $out "Badzy-Setup.exe") -Force -ErrorAction SilentlyContinue
@@ -227,7 +228,7 @@ if ($iscc) {
         # version.json: the program reads it from the latest GitHub release
         # to update itself (version + SHA-256 of the installer)
         $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
-        $json = "{`n  ""version"": ""$version"",`n  ""url"": ""https://github.com/YOUR_GITHUB_USERNAME/badzy/releases/download/v$version/Badzy-Setup.exe"",`n  ""sha256"": ""$hash""`n}`n"
+        $json = "{`n  ""version"": ""$version"",`n  ""url"": ""https://github.com/NoxEditz/BadzyIDM/releases/download/v$version/Badzy-Setup.exe"",`n  ""sha256"": ""$hash""`n}`n"
         [IO.File]::WriteAllText((Join-Path $dist "version.json"), $json)
     } else {
         Fail "Could not create the setup. Tip: move this folder out of Desktop/OneDrive (e.g. to C:\Badzy) and run BUILD.bat again."
