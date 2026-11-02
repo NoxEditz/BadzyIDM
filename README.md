@@ -1,6 +1,6 @@
 <div align="center">
 
-# Badzy 1.1.0
+# Badzy 2.0.0
 
 **A fast, native Windows download manager with a proper browser sidekick.**
 
@@ -28,7 +28,7 @@ This section tracks the v2 rework. It is updated with every commit so it always 
 | 4 | New UI: new colour system for all 9 themes, top bar with search, animated slide-in menu replacing the native menu bar, rounded sidebar and rows, shimmering progress bar, intro fade, theme swatches | Compiles with `cargo check`. **Not yet seen on screen**; dialogs still use the old look |
 | 4b | Restyle dialogs (`dialogs.slint`), empty states, per-download progress window | Not started |
 | 5 | Custom installer design, new README | Not started |
-| Ext | Extension 2.0.0 (you can sign it again): palette aligned with the app, icons from the new master, `update_url` fixed | In progress |
+| Ext | Extension 2.0.0 (sign it again for Firefox): palette aligned with the app, icons from the new master, `update_url` fixed, its tests pass | Done |
 
 **How it was checked.** `cargo test -p swiftget-engine` (67 tests, including 32-connection, pause/resume and outage downloads) and `cargo check -p swiftget` (compiles the whole Slint UI) on Linux. The Windows-only code (taskbar identity, icons, hidden files) and the CI workflow could not be run in the authoring environment, so the first Actions run is the real test.
 

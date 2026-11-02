@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Badzy",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "Badzy extension.",
   "permissions": [
     "downloads",
@@ -57,7 +57,7 @@
     "gecko": {
       "id": "badzy@badzy.local",
       "strict_min_version": "140.0",
-      "update_url": "https://github.com/YOUR_GITHUB_USERNAME/badzy/releases/latest/download/firefox-updates.json",
+      "update_url": "https://github.com/NoxEditz/BadzyIDM/releases/latest/download/firefox-updates.json",
       "data_collection_permissions": {
         "required": [
           "none"
