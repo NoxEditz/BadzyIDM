@@ -152,6 +152,83 @@ pub async fn run(
     Ok(())
 }
 
+/// A connection writes to disk when this much has arrived...
+const FLUSH_BYTES: usize = 1 << 20;
+/// ...or when its oldest unwritten byte is this old (so slow connections
+/// still show their progress).
+const FLUSH_EVERY: Duration = Duration::from_millis(200);
+
+/// Bytes a connection has received but not written yet. The segment table
+/// (`pos`) only ever counts bytes that are on disk, so a crash, a pause or a
+/// cancel can lose at most one batch and resuming stays exact. Whatever is
+/// held is also written when this is dropped (error, pause, cancel).
+struct Pending<'a> {
+    w: &'a Worker,
+    idx: usize,
+    req_end: u64,
+    buf: Vec<u8>,
+    since: std::time::Instant,
+}
+
+impl<'a> Pending<'a> {
+    fn new(w: &'a Worker, idx: usize, req_end: u64) -> Self {
+        Pending { w, idx, req_end, buf: Vec::with_capacity(FLUSH_BYTES + (64 << 10)), since: std::time::Instant::now() }
+    }
+
+    fn push(&mut self, data: &[u8]) {
+        if self.buf.is_empty() {
+            self.since = std::time::Instant::now();
+        }
+        self.buf.extend_from_slice(data);
+    }
+
+    /// Time to write: the batch is big, old, or completes the segment.
+    fn due(&self) -> bool {
+        if self.buf.len() >= FLUSH_BYTES || self.since.elapsed() >= FLUSH_EVERY {
+            return true;
+        }
+        let t = self.w.segs.lock().unwrap();
+        let s = &t[self.idx];
+        s.pos + self.buf.len() as u64 >= s.end.min(self.req_end)
+    }
+
+    /// Writes what is held (never past the end of the segment: another
+    /// connection may have taken the second half meanwhile). Returns true
+    /// when this segment is complete as far as this request goes.
+    fn flush(&mut self) -> anyhow::Result<bool> {
+        let (pos, stop) = {
+            let t = self.w.segs.lock().unwrap();
+            let s = &t[self.idx];
+            (s.pos, s.end.min(self.req_end))
+        };
+        let take = (self.buf.len() as u64).min(stop.saturating_sub(pos)) as usize;
+        if take > 0 {
+            write_at(&self.w.file, &self.buf[..take], pos)?;
+            let counted = {
+                let mut t = self.w.segs.lock().unwrap();
+                let s = &mut t[self.idx];
+                // `end` may have moved down while we wrote: count only what is ours
+                s.pos = (pos + take as u64).min(s.end);
+                s.pos.saturating_sub(pos)
+            };
+            self.w.progress.bytes.fetch_add(counted, Ordering::Relaxed);
+            self.w.progress.online();
+        }
+        self.buf.clear();
+        let t = self.w.segs.lock().unwrap();
+        let s = &t[self.idx];
+        Ok(s.pos >= s.end.min(self.req_end))
+    }
+}
+
+impl Drop for Pending<'_> {
+    fn drop(&mut self) {
+        if !self.buf.is_empty() {
+            let _ = self.flush();
+        }
+    }
+}
+
 struct Worker {
     shared: Arc<Shared>,
     job: HttpJob,
@@ -294,6 +371,10 @@ impl Worker {
         }
         let _guard = ConnGuard::new(&self.progress);
 
+        // What arrives is collected here and written in big batches, outside
+        // the lock: 32 connections no longer make a disk call for every
+        // network packet (a packet is only ~16 KB).
+        let mut pending = Pending::new(self, idx, req_end);
         loop {
             let chunk = match tokio::time::timeout(STALL_TIMEOUT, resp.chunk()).await {
                 Ok(r) => r?,
@@ -302,25 +383,13 @@ impl Worker {
             let Some(chunk) = chunk else { break };
             self.shared.limiter.acquire(chunk.len()).await;
             self.job.limiter.acquire(chunk.len()).await;
-            let finished = {
-                let mut table = self.segs.lock().unwrap();
-                let s = &mut table[idx];
-                // `end` may have moved down because another worker split us
-                let stop = s.end.min(req_end);
-                let room = stop.saturating_sub(s.pos);
-                let take = (chunk.len() as u64).min(room) as usize;
-                if take > 0 {
-                    write_at(&self.file, &chunk[..take], s.pos)?;
-                    s.pos += take as u64;
-                    self.progress.bytes.fetch_add(take as u64, Ordering::Relaxed);
-                    self.progress.online();
-                }
-                s.pos >= stop
-            };
-            if finished {
+            pending.push(&chunk);
+            if pending.due() && pending.flush()? {
                 return Ok(()); // dropping `resp` closes the connection
             }
         }
+        // the stream ended: write what is left
+        pending.flush()?;
 
         // the server closed the stream
         let mut table = self.segs.lock().unwrap();
