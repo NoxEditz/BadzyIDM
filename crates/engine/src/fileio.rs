@@ -50,3 +50,23 @@ pub fn make_sparse(file: &File) {
     #[cfg(not(windows))]
     let _ = file;
 }
+
+/// Temporary download files are hidden in Explorer (a leading dot does not
+/// hide anything on Windows). Best effort.
+pub fn hide(path: &std::path::Path) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::{GetFileAttributesW, SetFileAttributesW, FILE_ATTRIBUTE_HIDDEN, INVALID_FILE_ATTRIBUTES};
+        let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+        // SAFETY: `wide` is a NUL-terminated path that outlives both calls.
+        unsafe {
+            let a = GetFileAttributesW(wide.as_ptr());
+            if a != INVALID_FILE_ATTRIBUTES && a & FILE_ATTRIBUTE_HIDDEN == 0 {
+                SetFileAttributesW(wide.as_ptr(), a | FILE_ATTRIBUTE_HIDDEN);
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = path;
+}

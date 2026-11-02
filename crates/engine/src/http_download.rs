@@ -5,7 +5,7 @@
 //! offset of the `.sgpart` file. When a worker finishes it steals half of the
 //! biggest remaining segment, so all connections stay busy until the end.
 
-use crate::fileio::{make_sparse, write_at};
+use crate::fileio::{hide, make_sparse, write_at};
 use crate::http::{http_status_of, is_network_error, reconnect_delay, request, ConnGuard, HttpStatus, NetDrop, Progress, Shared};
 use crate::model::RequestHeaders;
 use crate::segments::{self, Segment};
@@ -14,9 +14,9 @@ use reqwest::header::RANGE;
 use reqwest::StatusCode;
 use std::fs::{File, OpenOptions};
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
@@ -83,6 +83,7 @@ pub async fn run(
         .write(true)
         .truncate(false)
         .open(&job.part_path)?;
+    hide(&job.part_path);
 
     {
         let mut table = segs.lock().unwrap();
@@ -114,8 +115,11 @@ pub async fn run(
     let child = cancel.child_token();
     let workers = if segmented { job.connections.max(1) } else { 1 };
     let mut set = JoinSet::new();
-    for _ in 0..workers {
+    let gate = Arc::new(Gate::new(workers));
+    for id in 0..workers {
         let ctx = Worker {
+            id,
+            gate: gate.clone(),
             shared: shared.clone(),
             job: job.clone(),
             segs: segs.clone(),
@@ -229,7 +233,49 @@ impl Drop for Pending<'_> {
     }
 }
 
+/// What the server tolerates. A server that answers "too many requests"
+/// (HTTP 429 / 503) is asked for fewer connections: the number allowed is
+/// halved, everybody waits as long as the server says (Retry-After), and
+/// the download goes on by itself. Nothing is shown as an error.
+struct Gate {
+    /// connections allowed now (a worker with a higher number retires)
+    allowed: AtomicU32,
+    /// the server's own wish (Retry-After, seconds), 0 = none given
+    retry_after: AtomicU64,
+    /// no further reduction until this moment (a burst of 429s counts once)
+    hold_until: Mutex<Instant>,
+    /// 429s in a row without any progress
+    streak: AtomicU32,
+}
+
+impl Gate {
+    fn new(n: u32) -> Self {
+        Gate { allowed: AtomicU32::new(n.max(1)), retry_after: AtomicU64::new(0), hold_until: Mutex::new(Instant::now()), streak: AtomicU32::new(0) }
+    }
+
+    /// The server said "slow down". Returns how long this worker waits.
+    fn throttled(&self) -> Duration {
+        let streak = self.streak.fetch_add(1, Ordering::Relaxed) + 1;
+        let said = self.retry_after.swap(0, Ordering::Relaxed);
+        let wait = if said > 0 { said.min(120) } else { (2u64 << streak.min(5)).min(60) };
+        let mut hold = self.hold_until.lock().unwrap();
+        if Instant::now() >= *hold {
+            let now = self.allowed.load(Ordering::Relaxed);
+            self.allowed.store((now / 2).max(1), Ordering::Relaxed);
+            *hold = Instant::now() + Duration::from_secs(wait);
+        }
+        Duration::from_secs(wait)
+    }
+}
+
+/// Seconds from a Retry-After header ("120"; a date is ignored).
+fn retry_after_secs(resp: &reqwest::Response) -> u64 {
+    resp.headers().get(reqwest::header::RETRY_AFTER).and_then(|v| v.to_str().ok()).and_then(|v| v.trim().parse().ok()).unwrap_or(0)
+}
+
 struct Worker {
+    id: u32,
+    gate: Arc<Gate>,
     shared: Arc<Shared>,
     job: HttpJob,
     segs: SegTable,
@@ -242,6 +288,11 @@ struct Worker {
 impl Worker {
     async fn run(self) -> anyhow::Result<()> {
         loop {
+            // the server wants fewer connections: this one is no longer needed
+            // (the others take over its work)
+            if self.id >= self.gate.allowed.load(Ordering::Relaxed) {
+                return Ok(());
+            }
             let idx = {
                 let mut table = self.segs.lock().unwrap();
                 if self.segmented {
@@ -288,6 +339,7 @@ impl Worker {
                         return Ok(());
                     }
                     attempt = 0; // one request done, ask for the next piece
+                    self.gate.streak.store(0, Ordering::Relaxed);
                 }
                 Err(e) => {
                     let after = self.segs.lock().unwrap()[idx].pos;
@@ -297,6 +349,22 @@ impl Worker {
                     }
                     let network = is_network_error(&e);
                     let status = http_status_of(&e);
+                    if matches!(status, Some(429 | 503)) {
+                        // too many connections for this server: fewer, and wait
+                        let wait = self.gate.throttled();
+                        self.progress.waiting.store(true, Ordering::Relaxed);
+                        if self.gate.streak.load(Ordering::Relaxed) > 40 {
+                            return Err(e.context("the server keeps refusing: too many requests"));
+                        }
+                        tokio::select! {
+                            _ = tokio::time::sleep(wait) => {},
+                            _ = self.cancel.cancelled() => return Err(Cancelled.into()),
+                        }
+                        if self.id >= self.gate.allowed.load(Ordering::Relaxed) {
+                            return Ok(()); // retire; the segment goes back to the others
+                        }
+                        continue;
+                    }
                     if network {
                         // no internet / reset / stall: wait as long as it takes,
                         // the part keeps what it already has
@@ -359,6 +427,9 @@ impl Worker {
         }
         let mut resp = rb.send().await?;
         let status = resp.status();
+        if matches!(status.as_u16(), 429 | 503) {
+            self.gate.retry_after.store(retry_after_secs(&resp), Ordering::Relaxed);
+        }
         if self.segmented {
             if status != StatusCode::PARTIAL_CONTENT {
                 if status.is_client_error() || status.is_server_error() {
@@ -403,5 +474,30 @@ impl Worker {
         } else {
             Err(NetDrop("connection closed early").into())
         }
+    }
+}
+
+#[cfg(test)]
+mod gate_tests {
+    use super::*;
+
+    #[test]
+    fn too_many_requests_halves_the_connections_once_per_burst() {
+        let g = Gate::new(32);
+        g.retry_after.store(7, Ordering::Relaxed);
+        assert_eq!(g.throttled(), Duration::from_secs(7)); // the server's own wish
+        assert_eq!(g.allowed.load(Ordering::Relaxed), 16);
+        // 31 other connections get the same answer at the same moment
+        for _ in 0..31 {
+            g.throttled();
+        }
+        assert_eq!(g.allowed.load(Ordering::Relaxed), 16);
+    }
+
+    #[test]
+    fn never_below_one_connection() {
+        let g = Gate::new(1);
+        g.throttled();
+        assert_eq!(g.allowed.load(Ordering::Relaxed), 1);
     }
 }

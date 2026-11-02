@@ -184,6 +184,22 @@ impl Manager {
         for q in startup_queues {
             mgr.start_queue(q);
         }
+        // temporary files nobody owns any more (a crash, a failed delete)
+        {
+            let settings = mgr.settings();
+            let mut dirs: Vec<PathBuf> = vec![settings.download_dir.clone()];
+            dirs.extend(settings.temp_dir.clone());
+            let owners: HashMap<u64, bool> = {
+                let inner = mgr.inner.lock().unwrap();
+                for e in inner.entries.values() {
+                    dirs.push(e.rec.save_dir.clone());
+                    dirs.push(e.rec.work_dir());
+                }
+                // id -> still needs its temporary files (not completed)
+                inner.entries.iter().map(|(id, e)| (*id as u64, e.rec.status != Status::Completed)).collect()
+            };
+            rt.spawn_blocking(move || sweep_orphans(dirs, &owners));
+        }
         let m = mgr.clone();
         rt.spawn(async move {
             let mut every = tokio::time::interval(Duration::from_millis(200));
@@ -2162,5 +2178,74 @@ mod inside_tests {
         assert!(!inside(Path::new("/d/Video/../x.bin"), d));
         assert!(!inside(Path::new("/d/Video"), d));
         assert!(!inside(Path::new("/d/Other/a.bin"), d));
+    }
+}
+
+/// Deletes ".badzy-<id>.sgpart", ".badzy-<id>.video.sgpart" and the like that
+/// belong to no download in the list, or to one that is complete already.
+/// Only files older than an hour are touched, and only in the download and
+/// temporary folders (and their direct sub folders): never anything else.
+fn sweep_orphans(mut dirs: Vec<PathBuf>, owners: &HashMap<u64, bool>) {
+    let mut subs = Vec::new();
+    for d in &dirs {
+        if let Ok(rd) = std::fs::read_dir(d) {
+            subs.extend(rd.flatten().map(|e| e.path()).filter(|p| p.is_dir()));
+        }
+    }
+    dirs.extend(subs);
+    dirs.sort();
+    dirs.dedup();
+    let old = Duration::from_secs(3600);
+    for dir in dirs {
+        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
+        for e in rd.flatten() {
+            let name = e.file_name().to_string_lossy().to_string();
+            let Some(rest) = name.strip_prefix(".badzy-") else { continue };
+            if !(name.ends_with(".sgpart") || name.ends_with(".sgparts")) {
+                continue;
+            }
+            let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+            let Ok(id) = digits.parse::<u64>() else { continue };
+            if owners.get(&id).copied().unwrap_or(false) {
+                continue; // an unfinished download still needs it
+            }
+            let aged = e.metadata().and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).map(|a| a > old).unwrap_or(false);
+            if !aged {
+                continue;
+            }
+            let p = e.path();
+            let _ = if p.is_dir() { std::fs::remove_dir_all(&p) } else { std::fs::remove_file(&p) };
+        }
+    }
+}
+
+#[cfg(test)]
+mod sweep_tests {
+    use super::*;
+
+    #[test]
+    fn only_unowned_old_temp_files_go() {
+        let dir = std::env::temp_dir().join(format!("badzy-sweep-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let old = std::time::SystemTime::now() - Duration::from_secs(7200);
+        let make = |n: &str, aged: bool| {
+            let p = dir.join(n);
+            std::fs::write(&p, b"x").unwrap();
+            if aged {
+                std::fs::File::options().write(true).open(&p).unwrap().set_modified(old).unwrap();
+            }
+        };
+        make(".badzy-33.sgpart", true); // nobody's: goes
+        make(".badzy-34.sgpart", true); // unfinished download 34: stays
+        make(".badzy-35.sgpart", true); // completed download 35: goes
+        make(".badzy-36.sgpart", false); // too new: stays
+        make("movie.mp4", true); // not ours: stays
+        let owners: HashMap<u64, bool> = [(34, true), (35, false)].into_iter().collect();
+        sweep_orphans(vec![dir.clone()], &owners);
+        let left = |n: &str| dir.join(n).exists();
+        assert!(!left(".badzy-33.sgpart") && !left(".badzy-35.sgpart"));
+        assert!(left(".badzy-34.sgpart") && left(".badzy-36.sgpart") && left("movie.mp4"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
