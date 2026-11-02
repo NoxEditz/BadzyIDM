@@ -117,27 +117,32 @@ export global Theme {
     out property <color> header-top: header-top-base.transparentize(glass);
     out property <color> header-bottom: header-bottom-base.transparentize(glass);
     out property <color> grid: grid-base.transparentize(glass);
-    property <color> window-base: [#f0f0f0, #0b0b10, #e8f1fb, #15131d, #eef5ef, #000000, #fbf1ea, #0f1c1e, #fbf0f4][mode];
-    property <color> panel-base: [#ffffff, #121219, #ffffff, #1d1a29, #ffffff, #09090b, #ffffff, #142527, #ffffff][mode];
-    property <color> toolbar-top-base: [#fdfdfd, #281017, #2f80ed, #2b2545, #2f9e5b, #1c0b0f, #f07b3f, #1b3a3d, #e05a8a][mode];
-    property <color> toolbar-bottom-base: [#e7ebf0, #12080d, #1b5fc4, #1e1a33, #1f7a43, #0c0507, #d4513a, #132b2e, #c23d6e][mode];
-    out property <color> toolbar-text: [#1b1f24, #fff2f3, #ffffff, #ece9f6, #ffffff, #f6ecec, #ffffff, #e3f4f3, #ffffff][mode];
-    out property <color> toolbar-hover: [#e5f1fb, #451722, #4a92f0, #3a3260, #45b06f, #33121a, #f5955f, #26504f, #e97aa1][mode];
-    out property <color> line: [#d9dde3, #302c35, #c6d8ef, #352f4d, #c9dfcf, #241a1d, #efd2c2, #24403f, #efcdda][mode];
-    property <color> grid-base: [#eef0f3, #17171e, #eaf2fc, #26223a, #eaf4ec, #0f0f12, #fbeee6, #1a2e30, #fbedf2][mode];
-    property <color> header-top-base: [#ffffff, #201b23, #f7fbff, #26223a, #f8fcf9, #141417, #fffaf6, #1b3133, #fffafc][mode];
-    property <color> header-bottom-base: [#eef1f5, #171219, #e3eefb, #201c31, #e2f0e6, #0d0d10, #f8e5d9, #16292b, #f8e3eb][mode];
-    out property <color> text: [#1b1f24, #f4f0f2, #13243a, #ece9f6, #15281b, #f3eeee, #2e1a12, #e3f4f3, #2e1420][mode];
-    out property <color> muted: [#5f6b78, #b2a8b0, #557090, #a59fc0, #557a61, #9d9396, #8a6352, #8fb3b0, #8a5a6c][mode];
-    out property <color> accent: [#1f6feb, #ff4054, #1565c0, #a78bfa, #1f8a4c, #ff3b4a, #d4513a, #2ec4b6, #c23d6e][mode];
-    out property <color> select: [#cce8ff, #35141d, #cfe4ff, #3d3366, #cdebd7, #2a0f15, #fbd9c8, #1d4b4b, #f8d3e1][mode];
-    out property <color> select-line: [#99d1ff, #a13a49, #8dbcf5, #5b4a99, #8ccaa2, #7a232d, #eea98a, #2b7470, #eaa0bb][mode];
-    out property <color> hover: [#e5f3ff, #24151b, #e3efff, #2a2541, #e2f3e7, #1a1215, #fdeadf, #1b3436, #fde6ee][mode];
+    property <color> window-base: [#f4f5f8, #0e0e14, #eef3fb, #12101b, #f0f6f1, #000000, #fbf3ec, #0b1618, #fbf1f5][mode];
+    property <color> panel-base: [#ffffff, #17171f, #ffffff, #1b1826, #ffffff, #0c0c10, #ffffff, #112124, #ffffff][mode];
+    property <color> toolbar-top-base: [#ffffff, #12121a, #ffffff, #161320, #ffffff, #060608, #ffffff, #0e1d20, #ffffff][mode];
+    property <color> toolbar-bottom-base: [#ffffff, #12121a, #ffffff, #161320, #ffffff, #060608, #ffffff, #0e1d20, #ffffff][mode];
+    out property <color> toolbar-text: [#1b1f2a, #f2eff4, #12233a, #ece9f6, #15281b, #f3eeee, #2e1a12, #e3f4f3, #2e1420][mode];
+    out property <color> toolbar-hover: [#e9edfa, #262230, #e1ecfb, #2a2540, #e1f1e6, #1a1317, #fde6d8, #1a3437, #fde1eb][mode];
+    out property <color> line: [#e4e6ee, #26262f, #d6e2f3, #2b2740, #d6e8dc, #1a1a20, #f2dccd, #1d3438, #f2d7e2][mode];
+    property <color> grid-base: [#f6f7fa, #17171f, #f3f7fd, #1b1826, #f4f9f5, #0c0c10, #fdf6f0, #112124, #fdf4f7][mode];
+    property <color> header-top-base: [#f7f8fb, #1c1c25, #f5f9ff, #201d2f, #f6faf7, #111115, #fdf8f3, #15292c, #fdf7f9][mode];
+    property <color> header-bottom-base: [#f7f8fb, #1c1c25, #f5f9ff, #201d2f, #f6faf7, #111115, #fdf8f3, #15292c, #fdf7f9][mode];
+    out property <color> text: [#171a23, #f4f1f5, #12233a, #ece9f6, #15281b, #f3eeee, #2e1a12, #e3f4f3, #2e1420][mode];
+    out property <color> muted: [#6b7385, #9b97a6, #5a7596, #a29cc0, #5b7f66, #8f8a94, #8a6352, #8fb3b0, #8a5a6c][mode];
+    out property <color> accent: [#e11d48, #ff3d5a, #2563eb, #a78bfa, #16a34a, #ff2d46, #ea580c, #2dd4bf, #db2777][mode];
+    out property <color> select: [#fde4ea, #2a1520, #dbe8ff, #34294f, #d5efdc, #230c12, #fde0cf, #17403f, #fbd5e4][mode];
+    out property <color> select-line: [#f7a8ba, #7a2438, #9bbcf7, #5b4a99, #8fd1a6, #6e1c28, #f0a889, #2b7470, #eea0bb][mode];
+    out property <color> hover: [#f1f3f9, #1d1d27, #eaf1fc, #26223a, #e9f3ec, #14141a, #fdf0e6, #162d30, #fdeaf0][mode];
     out property <color> ok: dark ? #3fcf7a : #1f9d55;
     out property <color> warn: #e08a00;
     out property <color> err: dark ? #ff8a5c : #d23b32;
     out property <color> bar-bg: dark ? #2a2a31 : #e6e6e6;
     out property <color> input-bg: dark ? #1a1a20 : #ffffff;
+    // second colour of the accent gradient (top bar line, progress bars)
+    out property <color> accent2: [#fb7185, #ff8a5c, #38bdf8, #f0abfc, #4ade80, #ff7a45, #fbbf24, #5eead4, #f472b6][mode];
+    // the swatches of the theme picker: window colour + accent of every theme
+    out property <[color]> swatch-bg: [#f4f5f8, #0e0e14, #eef3fb, #12101b, #f0f6f1, #000000, #fbf3ec, #0b1618, #fbf1f5];
+    out property <[color]> swatch-fg: [#e11d48, #ff3d5a, #2563eb, #a78bfa, #16a34a, #ff2d46, #ea580c, #2dd4bf, #db2777];
 }
 
 // A row that runs from right to left for Arabic (Theme.rtl), otherwise
@@ -880,17 +885,15 @@ export component ToolBtn inherits Rectangle {
     in property <bool> small;
     callback clicked();
     // small buttons: every one fits a 960 px wide window
-    width: root.small ? 34px : 56px;
-    height: root.small ? 34px : 56px;
+    width: root.small ? 38px : 60px;
+    height: root.small ? 38px : 58px;
     // a name that is still too long never covers the next button
     clip: true;
-    border-radius: 6px;
-    // Keep a stable one-pixel outline so hover never nudges adjacent buttons.
-    border-width: 1px;
-    border-color: ta.has-hover && root.enabled ? Theme.select-line : transparent;
+    border-radius: 12px;
     background: !root.enabled ? transparent : ta.pressed ? Theme.select : ta.has-hover ? Theme.toolbar-hover : transparent;
-    animate background { duration: 150ms; easing: ease-out; }
-    animate border-color { duration: 150ms; easing: ease-out; }
+    transform-scale: !root.enabled ? 1.0 : ta.pressed ? 0.93 : ta.has-hover ? 1.05 : 1.0;
+    animate background { duration: 160ms; easing: ease-out; }
+    animate transform-scale { duration: 140ms; easing: ease-out; }
     // what the button does, shown when the mouse rests on it
     pure function describe(k: string) -> string {
         if (k == "add") { return @tr("Download a file from an address you type or paste (Ctrl+N)."); }
@@ -1004,12 +1007,20 @@ export component TreeItem inherits Rectangle {
     callback toggle();
     // right click, at this position inside the item
     callback context(length, length);
-    height: 23px;
-    border-radius: 4px;
+    height: 32px;
+    border-radius: 10px;
     background: root.selected ? Theme.select : ta.has-hover ? Theme.hover : transparent;
     animate background { duration: 150ms; easing: ease-out; }
-    border-width: root.selected ? 1px : 0px;
-    border-color: Theme.select-line;
+    // the marker of the chosen item grows in
+    Rectangle {
+        x: Theme.rtl ? parent.width - 4px : 1px;
+        y: (parent.height - self.height) / 2;
+        width: 3px;
+        height: root.selected ? 18px : 0px;
+        border-radius: 1.5px;
+        background: Theme.accent;
+        animate height { duration: 200ms; easing: ease-out; }
+    }
     ta := TouchArea {
         width: parent.width;
         height: parent.height;
@@ -1033,25 +1044,16 @@ export component TreeItem inherits Rectangle {
         Rectangle {
             width: 11px;
             if root.expandable: Rectangle {
-                y: (parent.height - 11px) / 2;
-                width: 11px;
-                height: 11px;
-                border-width: 1px;
-                border-color: Theme.muted;
-                background: Theme.panel;
-                Rectangle {
-                    x: 2px;
-                    y: 5px;
-                    width: 7px;
-                    height: 1px;
-                    background: Theme.text;
-                }
-                if !root.expanded: Rectangle {
-                    x: 5px;
-                    y: 2px;
-                    width: 1px;
-                    height: 7px;
-                    background: Theme.text;
+                width: parent.width;
+                height: parent.height;
+                Text {
+                    width: parent.width;
+                    height: parent.height;
+                    text: root.expanded ? "▾" : "▸";
+                    font-size: 10px;
+                    color: Theme.muted;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
                 }
                 TouchArea {
                     clicked => {
@@ -1225,8 +1227,8 @@ export component MenuEntry inherits Rectangle {
     in property <bool> bold;
     in property <bool> indent;
     callback clicked();
-    height: 26px;
-    border-radius: 3px;
+    height: 30px;
+    border-radius: 8px;
     background: ta.has-hover && root.enabled ? Theme.select : transparent;
     animate background { duration: 160ms; easing: ease-out; }
     ta := TouchArea {
