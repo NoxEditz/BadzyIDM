@@ -14,6 +14,26 @@ Badzy is a Rust desktop download manager with a Slint UI. It can split supported
 
 Badzy is based on **Ezoo Download** by Ahmed Ezzat. Read `THIRD-PARTY-NOTICES.txt` before redistributing it.
 
+## Redesign status (branch `redesign`)
+
+This section tracks the v2 rework. It is updated with every commit so it always says what is really finished.
+
+| Phase | What | State |
+|---|---|---|
+| 1 | Repo layout (`scripts/`, `docs/`, `assets/`), CI builds Badzy's own LGPL ffmpeg (cached, with a checksum-verified prebuilt fallback), bundles yt-dlp + aria2c with SHA-256 checks, silent install/uninstall test of the setup, release notes from the changelog, auto-update points at `NoxEditz/BadzyIDM` | Done, **not yet run on GitHub Actions** |
+| 2 | One logo: `scripts/make_branding.py` builds `icon.ico` (16-256 px), app and tray icons from `assets/branding/badzy-mark.png`; one AppUserModelID; window/taskbar icons loaded from the exe at the exact system size | Done, needs a look on Windows |
+| 3 | Speed: each connection writes to disk in 1 MiB batches outside the segment lock instead of per network packet. Resume stays exact (only bytes on disk are counted). | Done, 60 engine tests pass |
+| Fix | **HTTP 429 / 503** ("server answered HTTP 429"): treated as "slow down". Honours `Retry-After`, halves the connection count once per burst, waits and continues by itself, no manual Continue needed | Done, unit tested |
+| Fix | **`.badzy-<id>.sgpart` leftovers**: temp files are hidden in Explorer, and at startup orphans (no unfinished download owns them, older than 1 h, download/temp folders only) are deleted | Done, unit tested |
+| 4 | New UI: new colour system for all 9 themes, top bar with search, animated slide-in menu replacing the native menu bar, rounded sidebar and rows, shimmering progress bar, intro fade, theme swatches | Compiles with `cargo check`. **Not yet seen on screen**; dialogs still use the old look |
+| 4b | Restyle dialogs (`dialogs.slint`), empty states, per-download progress window | Not started |
+| 5 | Custom installer design, new README | Not started |
+| Ext | Extension 2.0.0 (you can sign it again): palette aligned with the app, icons from the new master, `update_url` fixed | In progress |
+
+**How it was checked.** `cargo test -p swiftget-engine` (67 tests, including 32-connection, pause/resume and outage downloads) and `cargo check -p swiftget` (compiles the whole Slint UI) on Linux. The Windows-only code (taskbar identity, icons, hidden files) and the CI workflow could not be run in the authoring environment, so the first Actions run is the real test.
+
+**Known limits right now:** the new UI has not been screenshotted, so spacing and animation need a visual pass; the installer is still the old design.
+
 ## Quickest Windows build
 
 ### Option A — build everything with one double-click
