@@ -186,6 +186,7 @@ fn install_crash_log() {
 
 fn main() -> anyhow::Result<()> {
     install_crash_log();
+    winfx::init_identity();
     // started by Windows at sign-in: stay next to the clock, no window
     let background = std::env::args().any(|a| a == "--background");
     let data_dir = default_data_dir();
