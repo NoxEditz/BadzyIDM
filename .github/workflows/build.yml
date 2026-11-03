@@ -199,9 +199,10 @@ jobs:
           $ErrorActionPreference = "Stop"
           foreach ($tool in "ffmpeg.exe -version", "yt-dlp.exe --version", "aria2c.exe --version") {
             $parts = $tool.Split(" ")
-            $out = & "build-cache/stage/tools/$($parts[0])" $parts[1] | Select-Object -First 1
-            if ($LASTEXITCODE -ne 0) { throw "$($parts[0]) does not run" }
-            Write-Host "$($parts[0]): $out"
+            $all = & "build-cache/stage/tools/$($parts[0])" $parts[1] 2>&1
+            $code = $LASTEXITCODE
+            Write-Host "$($parts[0]) exit code $code : $($all | Select-Object -First 1)"
+            if ($code -ne 0) { throw "$($parts[0]) does not run (exit code $code)" }
           }
           # silent install, check the files, silent uninstall
           $dir = Join-Path $env:RUNNER_TEMP "BadzyInstallTest"
