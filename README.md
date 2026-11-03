@@ -26,6 +26,7 @@ This section tracks the v2 rework. It is updated with every commit so it always 
 | Fix | **HTTP 429 / 503** ("server answered HTTP 429"): treated as "slow down". Honours `Retry-After`, halves the connection count once per burst, waits and continues by itself, no manual Continue needed | Done, unit tested |
 | Fix | **`.badzy-<id>.sgpart` leftovers**: temp files are hidden in Explorer, and at startup orphans (no unfinished download owns them, older than 1 h, download/temp folders only) are deleted | Done, unit tested |
 | 4 | New UI: new colour system for all 9 themes, top bar with search, animated slide-in menu replacing the native menu bar, rounded sidebar and rows, shimmering progress bar, intro fade, theme swatches | Compiles with `cargo check`. **Not yet seen on screen**; dialogs still use the old look |
+| Art | Design kit imported: wordmark, tagline, backgrounds cleaned (`scripts/clean_assets.py`), file-type cards redrawn as vectors (`scripts/make_cards.py`). **The original orbit logo stays the app icon**; the kit's arrow logo is not used | Done |
 | 4b | Restyle dialogs (`dialogs.slint`), empty states, per-download progress window | Not started |
 | 5 | Custom installer design, new README | Not started |
 | Ext | Extension 2.0.0 (sign it again for Firefox): palette aligned with the app, icons from the new master, `update_url` fixed, its tests pass | Done |
