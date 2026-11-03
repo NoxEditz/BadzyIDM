@@ -1,0 +1,42 @@
+BADZY — RECONSTRUCTED DESIGN SPECIFICATION
+================================================
+Note: references are flattened raster mockups; exact original source tokens and font metadata
+cannot be recovered. These are close visual reconstructions, not verified originals.
+
+COLOURS (HEX)
+Window background:       #08090F
+Panel background:        #121218
+Card border:              #2A0F1B
+Red accent:               #F20B36
+Red glow:                 #FF0033
+Primary text:              #F4EFF7
+Muted text:                #A19AAA
+Green complete badge:     #00D676
+
+Appearance swatches (8):
+Crimson #F20B36 | Violet #8B12E8 | Blue #0879E8 | Cyan #00BBD4
+Green #00B96B | Lime #79C900 | Orange #F28A16 | Cool gray #858B9B
+
+TYPOGRAPHY
+Arabic: Cairo or Tajawal (Google Fonts; SIL Open Font License).
+Latin: Exo 2 (Google Fonts; SIL Open Font License), Segoe UI fallback.
+https://fonts.google.com/specimen/Cairo
+https://fonts.google.com/specimen/Tajawal
+https://fonts.google.com/specimen/Exo+2
+
+COMPONENT METRICS (RECONSTRUCTED)
+Main cards/panels radius: 14 px
+Buttons radius: 10 px
+Large dialogs radius: 24 px
+Border width: 1 px (selected: 1.5–2 px)
+Card glow: 0 0 14px rgba(242, 11, 54, 0.22)
+Strong selected glow: 0 0 20px rgba(255, 0, 51, 0.38)
+Glow colour: #FF0033
+Recommended spacing unit: 4 px
+
+ASSET NOTES
+PNG artwork is reconstructed from the visual references and a generated asset atlas.
+SVG icons use 24x24 viewBox, 1.75px stroke, rounded caps/joins, currentColor.
+File-type SVG icons use 64x64 viewBox.
+The browser-extension mockup is a companion concept, not an existing product screenshot.
+Self-host the licensed font files from Google Fonts and include the OFL license text.
