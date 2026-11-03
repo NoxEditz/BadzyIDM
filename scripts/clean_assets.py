@@ -94,9 +94,7 @@ save(crop_to_art(defringe(load("branding/badzy-wordmark.png"))), "wordmark.png",
 # the tagline file holds the real tagline on top and a broken copy below
 tag = load("branding/tagline.png")
 save(crop_to_art(defringe(tag.crop((0, 0, tag.width, 205)))), "tagline.png", 460)
-# file cards (square, keep their glow)
-for k in ("zip", "video", "audio", "document", "image", "program"):
-    save(crop_to_art(keep_main(defringe(load(f"file-cards/card-art-{k}.png")))), f"card-{k}.png", 360)
+# file cards are drawn as vectors now: scripts/make_cards.py
 # big art: faded edges instead of hard rectangles
 save(feather(load("backgrounds/sidebar-art.png"), "ltrb", 70), "sidebar-art.png", 520)
 save(feather(defringe(load("backgrounds/window-bg-corner-tr.png"), 110, 190).crop((0, 0, 1200, 640)), "lb", 160), "corner-tr.png", 900)
