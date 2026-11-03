@@ -103,8 +103,8 @@ jobs:
             $base = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest"
             $zipName = "ffmpeg-master-latest-win64-lgpl.zip"
             Invoke-WebRequest "$base/$zipName" -OutFile "build-cache/$zipName"
-            $sums = (Invoke-WebRequest "$base/checksums.sha256").Content
-            $line = ($sums -split "`n" | Where-Object { $_ -match [regex]::Escape($zipName) } | Select-Object -First 1)
+            Invoke-WebRequest "$base/checksums.sha256" -OutFile build-cache/ff-sums.txt
+            $line = ((Get-Content build-cache/ff-sums.txt) | Where-Object { $_ -match [regex]::Escape($zipName) } | Select-Object -First 1)
             if (-not $line) { throw "no checksum published for $zipName" }
             if ((Get-FileHash "build-cache/$zipName" -Algorithm SHA256).Hash -ne $line.Trim().Split(" ")[0]) { throw "$zipName does not match its SHA-256" }
             Expand-Archive "build-cache/$zipName" "build-cache/ffmpeg-btbn" -Force
@@ -116,8 +116,8 @@ jobs:
           # yt-dlp: latest release, checked against the SHA-256 list yt-dlp publishes
           $ytBase = "https://github.com/yt-dlp/yt-dlp/releases/latest/download"
           Invoke-WebRequest "$ytBase/yt-dlp.exe" -OutFile "$t/yt-dlp.exe"
-          $ytSums = (Invoke-WebRequest "$ytBase/SHA2-256SUMS").Content
-          $ytLine = ($ytSums -split "`n" | Where-Object { $_ -match '\s\*?yt-dlp\.exe\s*$' } | Select-Object -First 1)
+          Invoke-WebRequest "$ytBase/SHA2-256SUMS" -OutFile build-cache/yt-sums.txt
+          $ytLine = ((Get-Content build-cache/yt-sums.txt) | Where-Object { $_ -match '\s\*?yt-dlp\.exe\s*$' } | Select-Object -First 1)
           if (-not $ytLine) { throw "no checksum published for yt-dlp.exe" }
           if ((Get-FileHash "$t/yt-dlp.exe" -Algorithm SHA256).Hash -ne $ytLine.Trim().Split(" ")[0]) { throw "yt-dlp.exe does not match its SHA-256" }
           # aria2c (torrents): one fixed, known release
