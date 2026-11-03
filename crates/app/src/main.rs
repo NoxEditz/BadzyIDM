@@ -2848,6 +2848,11 @@ pub(crate) fn refresh(ui: &Ui) {
         t("Speed limiter: off")
     };
     w.set_limiter_text(limiter_text.into());
+    if let Some((total, avail)) = crate::winfx::disk_space(&settings.download_dir) {
+        w.set_disk_used(fmt_size(total.saturating_sub(avail)).into());
+        w.set_disk_free(fmt_size(avail).into());
+        w.set_disk_frac(total.saturating_sub(avail) as f32 / total as f32);
+    }
     w.set_all_done(completion_index(ui.ctx.mgr.when_all_done()));
 }
 

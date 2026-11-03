@@ -438,3 +438,25 @@ mod tests {
         assert_eq!(centered((0, 0), (1366, 768), (1600, 900)), (0, 0));
     }
 }
+
+/// (total, free) bytes of the disk a folder is on.
+pub(crate) fn disk_space(dir: &std::path::Path) -> Option<(u64, u64)> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+        let wide: Vec<u16> = dir.as_os_str().encode_wide().chain(Some(0)).collect();
+        let (mut avail, mut total, mut free) = (0u64, 0u64, 0u64);
+        // SAFETY: `wide` is a NUL-terminated path; the three outputs are valid u64s.
+        let ok = unsafe { GetDiskFreeSpaceExW(wide.as_ptr(), &mut avail, &mut total, &mut free) };
+        if ok != 0 && total > 0 {
+            return Some((total, avail));
+        }
+        None
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = dir;
+        None
+    }
+}
