@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.0.0 — 2026-11-03
+
+### Desktop app
+- New design system: new colours for all nine themes, rounded cards, top bar with search, slide-in menu (replaces the native menu bar), animated progress with a moving light, intro animation, theme swatches.
+- One Badzy logo everywhere: crisp 16-256 px icon for the exe, taskbar and tray; one taskbar identity so windows group under one button.
+- Faster disk writes: each connection writes in 1 MiB batches.
+- **Fixed:** "server answered HTTP 429" no longer needs a manual Continue. Badzy waits as the server asks (Retry-After), uses fewer connections and carries on by itself.
+- **Fixed:** leftover `.badzy-<id>.sgpart` files. Temp files are hidden and orphans are removed at startup.
+
+### Build
+- CI builds Badzy's own ffmpeg (with a verified fallback) and bundles ffmpeg, yt-dlp and aria2c into the installer, then tests a silent install.
+- Repo reorganised into `scripts/`, `docs/`, `assets/`.
+
+### Browser extension 2.0.0
+- Palette aligned with the app, new icons from the master logo, Firefox update URL points to this repository. The Firefox add-on must be signed again for this version.
+
 ## 1.1.0 — 2026-10-29
 
 ### Desktop UI

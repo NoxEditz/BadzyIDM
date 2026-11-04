@@ -78,7 +78,52 @@ pub(crate) fn centered(screen: (i32, i32), screen_size: (u32, u32), size: (u32, 
 #[cfg(windows)]
 fn place_now(w: &slint::Window, maximizable: bool) -> bool {
     use slint::winit_030::{winit, WinitWindowAccessor};
-    w.with_winit_window(|win: &winit::window::Window| place_winit(win, maximizable)).is_some()
+    let placed = w.with_winit_window(|win: &winit::window::Window| place_winit(win, maximizable)).is_some();
+    if placed {
+        apply_icons(w);
+    }
+    placed
+}
+
+/// Every window of Badzy belongs to ONE taskbar identity, so all its windows
+/// group under one button, the pinned icon matches, and Windows keeps the
+/// right icon in jump lists and notifications. Call once, before any window.
+pub(crate) fn init_identity() {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
+        let id: Vec<u16> = "Badzy.Badzy".encode_utf16().chain(Some(0)).collect();
+        // SAFETY: `id` is a NUL-terminated UTF-16 string that outlives the call.
+        unsafe {
+            SetCurrentProcessExplicitAppUserModelID(id.as_ptr());
+        }
+    }
+}
+
+/// The taskbar, Alt+Tab and the title bar get the icon frames that are
+/// inside Badzy.exe (16..256 px, hand-sized per frame) at the exact size
+/// Windows asks for, instead of one big picture that Windows shrinks badly.
+#[cfg(windows)]
+fn apply_icons(w: &slint::Window) {
+    use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetSystemMetrics, LoadImageW, SendMessageW, ICON_BIG, ICON_SMALL, IMAGE_ICON, LR_SHARED, SM_CXICON, SM_CXSMICON, SM_CYICON, SM_CYSMICON, WM_SETICON,
+    };
+    let Some(hwnd) = hwnd_of(w) else { return };
+    // SAFETY: plain Win32 calls; the icons are shared resources of this
+    // exe (id 1, put there by build.rs), so Windows owns and frees them.
+    unsafe {
+        let module = GetModuleHandleW(std::ptr::null());
+        let load = |cx: i32, cy: i32| LoadImageW(module, 1usize as *const u16, IMAGE_ICON, cx, cy, LR_SHARED);
+        let big = load(GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON));
+        let small = load(GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON));
+        if !big.is_null() {
+            SendMessageW(hwnd as _, WM_SETICON, ICON_BIG as usize, big as isize);
+        }
+        if !small.is_null() {
+            SendMessageW(hwnd as _, WM_SETICON, ICON_SMALL as usize, small as isize);
+        }
+    }
 }
 
 #[cfg(windows)]
@@ -391,5 +436,27 @@ mod tests {
         assert_eq!(centered((1920, 0), (1280, 1024), (640, 480)), (2240, 272));
         // bigger than the screen: its top left corner stays on the screen
         assert_eq!(centered((0, 0), (1366, 768), (1600, 900)), (0, 0));
+    }
+}
+
+/// (total, free) bytes of the disk a folder is on.
+pub(crate) fn disk_space(dir: &std::path::Path) -> Option<(u64, u64)> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+        let wide: Vec<u16> = dir.as_os_str().encode_wide().chain(Some(0)).collect();
+        let (mut avail, mut total, mut free) = (0u64, 0u64, 0u64);
+        // SAFETY: `wide` is a NUL-terminated path; the three outputs are valid u64s.
+        let ok = unsafe { GetDiskFreeSpaceExW(wide.as_ptr(), &mut avail, &mut total, &mut free) };
+        if ok != 0 && total > 0 {
+            return Some((total, avail));
+        }
+        None
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = dir;
+        None
     }
 }

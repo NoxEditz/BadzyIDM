@@ -1,6 +1,6 @@
 //! The helper programs that come with Badzy: yt-dlp (finds the video
 //! links) and aria2 (torrents) from their GitHub releases, and our own small
-//! ffmpeg build (joins video + audio, MP3; built by tools/ffmpeg/build.sh). They live in the "tools" folder
+//! ffmpeg build (joins video + audio, MP3; built by scripts/ffmpeg/build.sh). They live in the "tools" folder
 //! of the install folder. Once a day, silently, Badzy checks for new
 //! versions and updates them, and puts them back if one went missing.
 

@@ -12,7 +12,7 @@ yt-dlp - https://github.com/yt-dlp/yt-dlp
 FFmpeg - https://github.com/FFmpeg/FFmpeg
   The ffmpeg program in the "tools" folder is Badzy's own small build
   of the unmodified FFmpeg sources (version in ffmpeg-version.txt), made with
-  tools/ffmpeg/build.sh from the Badzy sources. It is licensed under
+  scripts/ffmpeg/build.sh from the Badzy sources. It is licensed under
   the GNU Lesser General Public License version 3 or later (see
   ffmpeg-LICENSE.txt in the "tools" folder).
 

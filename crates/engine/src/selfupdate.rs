@@ -19,7 +19,7 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
-pub const REPO: &str = "YOUR_GITHUB_USERNAME/badzy";
+pub const REPO: &str = "NoxEditz/BadzyIDM";
 pub const SETUP_NAME: &str = "Badzy-Setup.exe";
 
 pub fn version_url() -> String {

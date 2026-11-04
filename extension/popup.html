@@ -7,19 +7,19 @@
 <style>
   :root {
     color-scheme: dark;
-    --bg: #09090c;
-    --surface: #111116;
-    --surface-raised: #17171e;
+    --bg: #0e0e14;
+    --surface: #17171f;
+    --surface-raised: #1c1c25;
     --surface-hover: #202027;
-    --line: #282830;
+    --line: #26262f;
     --text: #f5f3f4;
     --muted: #a5a0a7;
     --subtle: #77727b;
-    --red: #ff4054;
+    --red: #ff3d5a;
     --red-strong: #e92d45;
     --red-soft: #35121b;
     --green: #42d392;
-    --radius: 13px;
+    --radius: 16px;
   }
   * { box-sizing: border-box; }
   body {
@@ -36,7 +36,7 @@
   button:disabled { opacity: .55; cursor: wait; }
   header {
     display: flex; align-items: center; gap: 10px; padding: 15px 17px 14px;
-    border-bottom: 1px solid var(--line); background: linear-gradient(110deg, #171015, #111116 70%);
+    border-bottom: 2px solid transparent; border-image: linear-gradient(90deg, #ff3d5a, #ff8a5c) 1; background: linear-gradient(110deg, #1c1218, #17171f 70%);
   }
   header img { width: 30px; height: 30px; filter: drop-shadow(0 2px 7px rgb(255 64 84 / 15%)); }
   .brand { min-width: 0; }
