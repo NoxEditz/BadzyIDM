@@ -153,75 +153,64 @@ export component HRow inherits FlexboxLayout {
     alignment: stretch;
 }
 
-// The standard check box, with the box on the right for Arabic (Theme.rtl).
-export component CheckBox inherits VerticalLayout {
+// A round-cornered check box; the box is on the right for Arabic (Theme.rtl).
+export component CheckBox inherits Rectangle {
     in property <string> text;
     in property <bool> enabled: true;
     in-out property <bool> checked;
     callback toggled();
-    alignment: center;
-    if !Theme.rtl: StdCheckBox {
-        text: root.text;
+    min-height: 28px;
+    min-width: 28px + lbl.preferred-width;
+    accessible-role: checkbox;
+    accessible-checkable: true;
+    accessible-checked: root.checked;
+    accessible-label: root.text;
+    opacity: root.enabled ? 1.0 : 0.45;
+    ta := TouchArea {
         enabled: root.enabled;
-        checked <=> root.checked;
-        toggled => {
+        clicked => {
+            root.checked = !root.checked;
             root.toggled();
         }
     }
-    if Theme.rtl: Rectangle {
-        min-height: 20px;
-        accessible-role: checkbox;
-        accessible-checkable: true;
-        accessible-checked: root.checked;
-        accessible-label: root.text;
-        accessible-enabled: root.enabled;
-        accessible-action-default => {
-            if (root.enabled) {
-                root.checked = !root.checked;
-                root.toggled();
-            }
-        }
-        opacity: root.enabled ? 1.0 : 0.45;
-        rtl-touch := TouchArea {
-            enabled: root.enabled;
-            clicked => {
-                root.checked = !root.checked;
-                root.toggled();
-            }
-        }
-        HRow {
-            spacing: 12px;
-            alignment: start;
+    HRow {
+        spacing: 10px;
+        alignment: start;
+        Rectangle {
+            width: 20px;
             Rectangle {
-                width: 18px;
-                Rectangle {
-                    y: (parent.height - 18px) / 2;
-                    width: 18px;
-                    height: 18px;
-                    border-radius: 3px;
-                    border-width: root.checked ? 0px : 1px;
-                    border-color: Theme.muted;
-                    background: root.checked ? Theme.accent : rtl-touch.has-hover ? Theme.hover : Theme.input-bg;
-                    if root.checked: Path {
-                        x: 3px;
-                        y: 3px;
-                        width: 12px;
-                        height: 12px;
-                        viewbox-width: 12;
-                        viewbox-height: 12;
-                        stroke: white;
-                        stroke-width: 1.6px;
-                        fill: transparent;
-                        commands: "M 1.5 6.5 L 4.5 9.5 L 10.5 2.5";
-                    }
+                y: (parent.height - 20px) / 2;
+                width: 20px;
+                height: 20px;
+                border-radius: 6px;
+                border-width: root.checked ? 0px : 1.5px;
+                border-color: ta.has-hover ? Theme.accent : Theme.muted;
+                background: root.checked ? @linear-gradient(135deg, Theme.accent 0%, Theme.accent2 100%) : Theme.input-bg;
+                animate background { duration: 140ms; }
+                if root.checked: Path {
+                    x: 4px;
+                    y: 4px;
+                    width: 12px;
+                    height: 12px;
+                    viewbox-width: 12;
+                    viewbox-height: 12;
+                    stroke: white;
+                    stroke-width: 1.8px;
+                    stroke-line-cap: round;
+                    stroke-line-join: round;
+                    fill: transparent;
+                    commands: "M 1.8 6.4 L 4.7 9.2 L 10.2 2.8";
                 }
             }
-            Text {
-                text: root.text;
-                horizontal-alignment: right;
-                vertical-alignment: center;
-                color: Theme.text;
-            }
+        }
+        lbl := Text {
+            text: root.text;
+            horizontal-alignment: Theme.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+            vertical-alignment: center;
+            color: Theme.text;
+            overflow: elide;
+            font-size: 13px * Theme.font-scale;
+            horizontal-stretch: 1;
         }
     }
 }

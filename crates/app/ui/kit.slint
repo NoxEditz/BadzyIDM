@@ -1,0 +1,277 @@
+// The controls of the program: buttons, fields, drop-downs, number boxes.
+// They keep the names and properties of the standard widgets, so every window
+// that imports them from here gets the new look.
+import { Theme, HRow } from "common.slint";
+
+export component Button inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary;
+    in property <bool> enabled: true;
+    callback clicked();
+    min-width: max(72px, lbl.preferred-width + 28px);
+    preferred-width: lbl.preferred-width + 28px;
+    height: 34px;
+    border-radius: 10px;
+    background: root.primary
+        ? @linear-gradient(90deg, Theme.accent 0%, Theme.accent2 100%)
+        : ta.pressed ? Theme.select : ta.has-hover ? Theme.hover : Theme.input-bg;
+    border-width: root.primary ? 0px : 1px;
+    border-color: ta.has-hover && root.enabled ? Theme.accent : Theme.line;
+    opacity: root.enabled ? 1.0 : 0.4;
+    transform-scale: !root.enabled ? 1.0 : ta.pressed ? 0.96 : ta.has-hover ? 1.03 : 1.0;
+    animate transform-scale { duration: 130ms; easing: ease-out; }
+    animate border-color { duration: 150ms; }
+    animate background { duration: 150ms; }
+    accessible-role: button;
+    accessible-label: root.text;
+    ta := TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            root.clicked();
+        }
+    }
+    lbl := Text {
+        width: parent.width;
+        height: parent.height;
+        text: root.text;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+        font-size: 13px * Theme.font-scale;
+        font-weight: root.primary ? 700 : 600;
+        color: root.primary ? #ffffff : Theme.text;
+    }
+}
+
+export component LineEdit inherits Rectangle {
+    in-out property <string> text <=> ti.text;
+    in property <string> placeholder-text;
+    in property <bool> enabled: true;
+    in property <bool> read-only;
+    in property <InputType> input-type: InputType.text;
+    out property <bool> has-focus: ti.has-focus;
+    callback accepted(string);
+    callback edited(string);
+    min-width: 60px;
+    height: 36px;
+    border-radius: 10px;
+    background: Theme.input-bg;
+    border-width: 1px;
+    border-color: ti.has-focus ? Theme.accent : Theme.line;
+    opacity: root.enabled ? 1.0 : 0.5;
+    animate border-color { duration: 150ms; }
+    ti := TextInput {
+        x: 12px;
+        y: (parent.height - self.height) / 2;
+        width: parent.width - 24px;
+        enabled: root.enabled;
+        read-only: root.read-only;
+        input-type: root.input-type;
+        single-line: true;
+        color: Theme.text;
+        selection-background-color: Theme.accent.with-alpha(0.45);
+        selection-foreground-color: Theme.text;
+        font-size: 13px * Theme.font-scale;
+        horizontal-alignment: Theme.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+        accepted => {
+            root.accepted(self.text);
+        }
+        edited => {
+            root.edited(self.text);
+        }
+    }
+    if ti.text == "": Text {
+        x: 12px;
+        y: (parent.height - self.height) / 2;
+        width: parent.width - 24px;
+        text: root.placeholder-text;
+        color: Theme.muted;
+        overflow: elide;
+        font-size: 13px * Theme.font-scale;
+        horizontal-alignment: Theme.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+    }
+}
+
+export component ComboBox inherits Rectangle {
+    in property <[string]> model;
+    in-out property <int> current-index: 0;
+    in property <bool> enabled: true;
+    callback selected(string);
+    min-width: 100px;
+    height: 36px;
+    border-radius: 10px;
+    background: ta.has-hover ? Theme.hover : Theme.input-bg;
+    border-width: 1px;
+    border-color: ta.has-hover ? Theme.accent : Theme.line;
+    opacity: root.enabled ? 1.0 : 0.5;
+    animate background { duration: 150ms; }
+    animate border-color { duration: 150ms; }
+    ta := TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            pop.show();
+        }
+    }
+    Text {
+        x: Theme.rtl ? 34px : 12px;
+        y: 0px;
+        width: parent.width - 46px;
+        height: parent.height;
+        text: root.current-index >= 0 && root.current-index < root.model.length ? root.model[root.current-index] : "";
+        color: Theme.text;
+        overflow: elide;
+        vertical-alignment: center;
+        font-size: 13px * Theme.font-scale;
+        horizontal-alignment: Theme.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+    }
+    Image {
+        x: Theme.rtl ? 10px : parent.width - 26px;
+        y: (parent.height - 16px) / 2;
+        width: 16px;
+        height: 16px;
+        source: @image-url("icons/chevron-down.svg");
+        colorize: Theme.muted;
+    }
+    pop := PopupWindow {
+        x: 0px;
+        y: root.height + 4px;
+        width: root.width;
+        height: min(root.model.length * 34px + 10px, 270px);
+        Rectangle {
+            background: Theme.panel;
+            border-radius: 12px;
+            border-width: 1px;
+            border-color: Theme.line;
+            drop-shadow-blur: 18px;
+            drop-shadow-color: #00000066;
+            Flickable {
+                x: 0px;
+                y: 5px;
+                height: parent.height - 10px;
+                content-height: root.model.length * 34px;
+                for item[i] in root.model: Rectangle {
+                    y: i * 34px;
+                    x: 5px;
+                    width: parent.width - 10px;
+                    height: 34px;
+                    border-radius: 8px;
+                    background: i == root.current-index ? Theme.select : it.has-hover ? Theme.hover : transparent;
+                    Text {
+                        x: 10px;
+                        width: parent.width - 20px;
+                        height: parent.height;
+                        text: item;
+                        color: i == root.current-index ? Theme.accent : Theme.text;
+                        font-weight: i == root.current-index ? 700 : 500;
+                        overflow: elide;
+                        vertical-alignment: center;
+                        font-size: 13px * Theme.font-scale;
+                        horizontal-alignment: Theme.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+                    }
+                    it := TouchArea {
+                        clicked => {
+                            root.current-index = i;
+                            root.selected(item);
+                            pop.close();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component SpinBox inherits Rectangle {
+    in-out property <int> value: 0;
+    in property <int> minimum: 0;
+    in property <int> maximum: 100;
+    in property <int> step-size: 1;
+    in property <bool> enabled: true;
+    callback edited(int);
+    min-width: 96px;
+    height: 36px;
+    border-radius: 10px;
+    background: Theme.input-bg;
+    border-width: 1px;
+    border-color: ti.has-focus ? Theme.accent : Theme.line;
+    opacity: root.enabled ? 1.0 : 0.5;
+    animate border-color { duration: 150ms; }
+    function set(v: int) {
+        root.value = clamp(v, root.minimum, root.maximum);
+        ti.text = root.value;
+        root.edited(root.value);
+    }
+    changed value => {
+        if (ti.text.to-float() != root.value) {
+            ti.text = root.value;
+        }
+    }
+    HRow {
+        Rectangle {
+            width: 30px;
+            background: m.has-hover ? Theme.hover : transparent;
+            border-radius: 9px;
+            Image {
+                x: 7px;
+                y: (parent.height - 16px) / 2;
+                width: 16px;
+                height: 16px;
+                source: @image-url("icons/minus.svg");
+                colorize: root.value <= root.minimum ? Theme.line : Theme.muted;
+            }
+            m := TouchArea {
+                enabled: root.enabled;
+                clicked => {
+                    root.set(root.value - root.step-size);
+                }
+            }
+        }
+        ti := TextInput {
+            horizontal-stretch: 1;
+            enabled: root.enabled;
+            input-type: InputType.number;
+            single-line: true;
+            color: Theme.text;
+            font-size: 13px * Theme.font-scale;
+            font-weight: 600;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            init => {
+                self.text = root.value;
+            }
+            edited => {
+                if (self.text != "") {
+                    root.value = clamp(self.text.to-float(), root.minimum, root.maximum);
+                    root.edited(root.value);
+                }
+            }
+            accepted => {
+                root.set(root.value);
+            }
+            changed has-focus => {
+                if (!self.has-focus) {
+                    root.set(root.value);
+                }
+            }
+        }
+        Rectangle {
+            width: 30px;
+            background: p.has-hover ? Theme.hover : transparent;
+            border-radius: 9px;
+            Image {
+                x: 7px;
+                y: (parent.height - 16px) / 2;
+                width: 16px;
+                height: 16px;
+                source: @image-url("icons/plus.svg");
+                colorize: root.value >= root.maximum ? Theme.line : Theme.muted;
+            }
+            p := TouchArea {
+                enabled: root.enabled;
+                clicked => {
+                    root.set(root.value + root.step-size);
+                }
+            }
+        }
+    }
+}
