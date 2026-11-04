@@ -1,0 +1,807 @@
+// Badzy Setup - design preview (installs nothing).
+global C {
+    out property <color> window: #08090f;
+    out property <color> panel: #121218;
+    out property <color> edge: #2a0f1b;
+    out property <color> red: #f20b36;
+    out property <color> pink: #ff4d6a;
+    out property <color> text: #f4eff7;
+    out property <color> muted: #a19aaa;
+    out property <color> ok: #00d676;
+}
+
+component Primary inherits Rectangle {
+    in property <string> text;
+    callback clicked();
+    width: max(120px, lbl.preferred-width + 48px);
+    height: 40px;
+    border-radius: 12px;
+    background: @linear-gradient(90deg, C.red 0%, C.pink 100%);
+    drop-shadow-blur: ta.has-hover ? 22px : 14px;
+    drop-shadow-color: C.red.transparentize(0.55);
+    drop-shadow-offset-y: 6px;
+    transform-scale: ta.pressed ? 0.95 : ta.has-hover ? 1.05 : 1.0;
+    animate transform-scale { duration: 130ms; easing: ease-out; }
+    animate drop-shadow-blur { duration: 160ms; }
+    ta := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+    lbl := Text {
+        text: root.text;
+        color: white;
+        font-size: 14px;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+component Ghost inherits Rectangle {
+    in property <string> text;
+    callback clicked();
+    width: max(90px, lbl.preferred-width + 40px);
+    height: 40px;
+    border-radius: 12px;
+    background: ta.has-hover ? #1b1b24 : C.panel;
+    border-width: 1px;
+    border-color: ta.has-hover ? C.red : C.edge;
+    transform-scale: ta.pressed ? 0.95 : ta.has-hover ? 1.04 : 1.0;
+    animate transform-scale { duration: 130ms; easing: ease-out; }
+    animate background { duration: 150ms; }
+    animate border-color { duration: 150ms; }
+    ta := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+    lbl := Text {
+        text: root.text;
+        color: ta.has-hover ? C.text : C.muted;
+        font-size: 13px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+component Switch inherits Rectangle {
+    in-out property <bool> on;
+    in property <string> text;
+    height: 46px;
+    border-radius: 12px;
+    background: C.panel;
+    border-width: 1px;
+    border-color: ta.has-hover ? C.red.transparentize(0.5) : C.edge;
+    animate border-color { duration: 150ms; }
+    ta := TouchArea {
+        clicked => {
+            root.on = !root.on;
+        }
+    }
+    Text {
+        x: 16px;
+        text: root.text;
+        color: C.text;
+        font-size: 14px;
+        vertical-alignment: center;
+        height: parent.height;
+    }
+    Rectangle {
+        x: parent.width - 58px;
+        y: (parent.height - 24px) / 2;
+        width: 44px;
+        height: 24px;
+        border-radius: 12px;
+        background: root.on ? @linear-gradient(90deg, C.red 0%, C.pink 100%) : C.edge;
+        Rectangle {
+            x: root.on ? 23px : 3px;
+            y: 3px;
+            width: 18px;
+            height: 18px;
+            border-radius: 9px;
+            background: white;
+            animate x { duration: 220ms; easing: cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+        }
+    }
+}
+
+component Tick inherits Rectangle {
+    in-out property <bool> on;
+    in property <string> text;
+    height: 28px;
+    ta := TouchArea {
+        clicked => {
+            root.on = !root.on;
+        }
+    }
+    Rectangle {
+        x: 0px;
+        y: 4px;
+        width: 20px;
+        height: 20px;
+        border-radius: 6px;
+        background: root.on ? @linear-gradient(135deg, C.red 0%, C.pink 100%) : C.panel;
+        border-width: root.on ? 0px : 1px;
+        border-color: ta.has-hover ? C.red : C.edge;
+        animate background { duration: 150ms; }
+        Path {
+            x: 4px;
+            y: 4px;
+            width: 12px;
+            height: 12px;
+            viewbox-width: 12;
+            viewbox-height: 12;
+            stroke: white;
+            stroke-width: 1.8px;
+            stroke-line-cap: round;
+            stroke-line-join: round;
+            fill: transparent;
+            commands: "M 1.8 6.4 L 4.7 9.2 L 10.2 2.8";
+            opacity: root.on ? 1.0 : 0.0;
+            animate opacity { duration: 140ms; }
+        }
+    }
+    Text {
+        x: 30px;
+        text: root.text;
+        color: C.text;
+        font-size: 14px;
+        vertical-alignment: center;
+        height: parent.height;
+    }
+}
+
+component Chip inherits Rectangle {
+    in property <image> icon;
+    in property <string> text;
+    height: 32px;
+    width: lbl.preferred-width + 46px;
+    border-radius: 16px;
+    background: C.panel;
+    border-width: 1px;
+    border-color: C.edge;
+    Image {
+        x: 12px;
+        y: 8px;
+        width: 16px;
+        height: 16px;
+        source: root.icon;
+        colorize: C.pink;
+    }
+    lbl := Text {
+        x: 34px;
+        text: root.text;
+        color: C.text;
+        font-size: 12px;
+        vertical-alignment: center;
+        height: parent.height;
+    }
+}
+
+component RoundBtn inherits Rectangle {
+    in property <bool> danger;
+    in property <image> icon;
+    callback clicked();
+    width: 26px;
+    height: 26px;
+    border-radius: 13px;
+    background: ta.has-hover ? (root.danger ? C.red : #24242e) : C.panel;
+    transform-scale: ta.pressed ? 0.88 : ta.has-hover ? 1.12 : 1.0;
+    animate transform-scale { duration: 120ms; }
+    animate background { duration: 140ms; }
+    Image {
+        x: 7px;
+        y: 7px;
+        width: 12px;
+        height: 12px;
+        source: root.icon;
+        colorize: ta.has-hover ? white : C.muted;
+    }
+    ta := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+export component SetupWindow inherits Window {
+    no-frame: true;
+    width: 820px;
+    height: 500px;
+    title: "Badzy Setup";
+    background: C.window;
+    icon: @image-url("art/logo.png");
+
+    callback drag();
+    callback minimize();
+    callback quit();
+    callback browse();
+
+    in-out property <string> path: "C:\\Users\\You\\AppData\\Local\\Programs\\Badzy";
+    in-out property <bool> desk: true;
+    in-out property <bool> boot: false;
+    in-out property <bool> launch: true;
+    in-out property <bool> ext: true;
+    in-out property <int> step: 0;
+    in-out property <float> pct: 0;
+    // seconds, drives the endless animations
+    property <float> t: animation-tick() / 1s;
+    property <float> done-t: root.step == 3 ? 1.0 : 0.0;
+    animate done-t { duration: 800ms; easing: ease-out; }
+    property <string> status: root.pct < 25 ? "Unpacking engine…" : root.pct < 50 ? "Adding ffmpeg…" : root.pct < 75 ? "Setting up the browser catcher…" : root.pct < 95 ? "Registering file types…" : "Polishing the last bits…";
+
+    Timer {
+        interval: 60ms;
+        running: root.step == 2 && root.pct < 100;
+        triggered => {
+            root.pct = min(100, root.pct + 0.9 + 0.8 * abs(Math.sin(root.pct * 0.45rad)));
+        }
+    }
+    Timer {
+        interval: 800ms;
+        running: root.step == 2 && root.pct >= 100;
+        triggered => {
+            root.step = 3;
+        }
+    }
+
+    // ---- the window: rounded, with a thin border
+    Rectangle {
+        border-radius: 22px;
+        clip: true;
+        background: C.window;
+        // ============ left: marble, logo
+        Rectangle {
+            x: 0px;
+            width: 312px;
+            background: C.panel;
+            clip: true;
+            Image {
+                x: -80px + 28px * Math.sin(root.t * 0.35rad);
+                y: -30px + 18px * Math.cos(root.t * 0.27rad);
+                width: 520px * 1.25;
+                height: 433px * 1.25 + 120px;
+                source: @image-url("art/sidebar-art.png");
+                image-fit: cover;
+                opacity: 0.75 + 0.15 * Math.sin(root.t * 0.8rad);
+            }
+            Rectangle {
+                background: @linear-gradient(180deg, #08090fee 0%, #08090f55 45%, #08090fdd 100%);
+            }
+            // glow behind the logo
+            Rectangle {
+                x: (parent.width - 220px) / 2;
+                y: 70px;
+                width: 220px;
+                height: 220px;
+                border-radius: 110px;
+                background: @radial-gradient(circle, #f20b36aa 0%, #f20b3600 70%);
+                opacity: 0.55 + 0.35 * Math.sin(root.t * 2.2rad);
+                transform-scale: 1.0 + 0.08 * Math.sin(root.t * 2.2rad);
+            }
+            Image {
+                x: (parent.width - 140px) / 2;
+                y: 110px + 5px * Math.sin(root.t * 1.4rad);
+                width: 140px;
+                height: 140px;
+                source: @image-url("art/logo.png");
+                image-fit: contain;
+            }
+            Image {
+                x: (parent.width - 220px) / 2;
+                y: 270px;
+                width: 220px;
+                height: 64px;
+                source: @image-url("art/wordmark.png");
+                image-fit: contain;
+            }
+            Image {
+                x: (parent.width - 190px) / 2;
+                y: parent.height - 92px;
+                width: 190px;
+                height: 70px;
+                source: @image-url("art/tagline.png");
+                image-fit: contain;
+            }
+        }
+        // ============ right: stepper + pages
+        Rectangle {
+            x: 312px;
+            width: parent.width - 312px;
+            // top line, title, window buttons
+            TouchArea {
+                height: 44px;
+                pointer-event(ev) => {
+                    if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
+                        root.drag();
+                    }
+                }
+            }
+            Text {
+                x: 36px;
+                y: 14px;
+                text: "Badzy Setup";
+                color: C.muted;
+                font-size: 12px;
+            }
+            RoundBtn {
+                x: parent.width - 80px;
+                y: 10px;
+                icon: @image-url("icons/minus.svg");
+                clicked => {
+                    root.minimize();
+                }
+            }
+            RoundBtn {
+                x: parent.width - 46px;
+                y: 10px;
+                danger: true;
+                icon: @image-url("icons/close.svg");
+                clicked => {
+                    root.quit();
+                }
+            }
+            // stepper
+            for name[i] in ["Welcome", "Options", "Install", "Done"]: Rectangle {
+                x: 36px + i * 111px;
+                y: 56px;
+                width: 111px;
+                height: 40px;
+                // the line to the next step
+                if i < 3: Rectangle {
+                    x: 55px;
+                    y: 6px;
+                    width: 111px;
+                    height: 2px;
+                    background: C.edge;
+                    Rectangle {
+                        width: root.step > i ? parent.width : 0px;
+                        background: @linear-gradient(90deg, C.red 0%, C.pink 100%);
+                        animate width { duration: 500ms; easing: ease-out; }
+                    }
+                }
+                Rectangle {
+                    x: 55px - 7px;
+                    y: 0px;
+                    width: 14px;
+                    height: 14px;
+                    border-radius: 7px;
+                    background: root.step >= i ? @linear-gradient(135deg, C.red 0%, C.pink 100%) : C.edge;
+                    drop-shadow-blur: root.step == i ? 12px : 0px;
+                    drop-shadow-color: C.red;
+                    transform-scale: root.step == i ? 1.25 : 1.0;
+                    animate transform-scale { duration: 300ms; easing: ease-out; }
+                    animate drop-shadow-blur { duration: 300ms; }
+                    if root.step == i: Rectangle {
+                        x: 4px;
+                        y: 4px;
+                        width: 6px;
+                        height: 6px;
+                        border-radius: 3px;
+                        background: white;
+                        opacity: 0.55 + 0.45 * Math.sin(root.t * 5rad);
+                    }
+                }
+                Text {
+                    y: 20px;
+                    width: parent.width;
+                    text: name;
+                    horizontal-alignment: center;
+                    font-size: 11px;
+                    color: root.step >= i ? C.text : C.muted;
+                }
+            }
+
+            // ---------- page 0: welcome
+            Rectangle {
+                x: 36px + (0 - root.step) * 70px;
+                y: 116px;
+                width: 440px;
+                height: 360px;
+                opacity: root.step == 0 ? 1.0 : 0.0;
+                visible: self.opacity > 0.01;
+                animate x { duration: 380ms; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+                animate opacity { duration: 300ms; }
+                Text {
+                    y: 28px;
+                    text: "DOWNLOAD MANAGER";
+                    color: C.pink;
+                    font-size: 11px;
+                    font-weight: 700;
+                    letter-spacing: 3px;
+                }
+                Text {
+                    y: 48px;
+                    text: "Meet Badzy";
+                    color: C.text;
+                    font-size: 46px;
+                    font-weight: 800;
+                }
+                Text {
+                    y: 112px;
+                    width: 380px;
+                    text: "Grab anything from the web at full speed. Split downloads, rescue videos and catch links straight from your browser.";
+                    color: C.muted;
+                    font-size: 14px;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    y: 188px;
+                    height: 32px;
+                    spacing: 8px;
+                    alignment: start;
+                    Chip {
+                        icon: @image-url("icons/lightning.svg");
+                        text: "Multi-connection speed";
+                    }
+                    Chip {
+                        icon: @image-url("icons/video.svg");
+                        text: "Videos with ffmpeg";
+                    }
+                }
+                HorizontalLayout {
+                    y: 228px;
+                    height: 32px;
+                    alignment: start;
+                    Chip {
+                        icon: @image-url("icons/globe.svg");
+                        text: "Browser catcher";
+                    }
+                }
+                Primary {
+                    x: 0px;
+                    y: 296px;
+                    text: "Get started  →";
+                    clicked => {
+                        root.step = 1;
+                    }
+                }
+            }
+
+            // ---------- page 1: options
+            Rectangle {
+                x: 36px + (1 - root.step) * 70px;
+                y: 116px;
+                width: 440px;
+                height: 360px;
+                opacity: root.step == 1 ? 1.0 : 0.0;
+                visible: self.opacity > 0.01;
+                animate x { duration: 380ms; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+                animate opacity { duration: 300ms; }
+                Text {
+                    y: 10px;
+                    text: "Choose your setup";
+                    color: C.text;
+                    font-size: 26px;
+                    font-weight: 800;
+                }
+                Text {
+                    y: 56px;
+                    text: "INSTALL FOLDER";
+                    color: C.muted;
+                    font-size: 10px;
+                    font-weight: 700;
+                    letter-spacing: 2px;
+                }
+                Rectangle {
+                    y: 76px;
+                    width: parent.width - 110px;
+                    height: 40px;
+                    border-radius: 12px;
+                    background: C.panel;
+                    border-width: 1px;
+                    border-color: pin.has-focus ? C.red : C.edge;
+                    animate border-color { duration: 150ms; }
+                    pin := TextInput {
+                        x: 14px;
+                        width: parent.width - 28px;
+                        height: parent.height;
+                        text <=> root.path;
+                        color: C.text;
+                        font-size: 12px;
+                        vertical-alignment: center;
+                        single-line: true;
+                    }
+                }
+                Ghost {
+                    x: parent.width - 98px;
+                    y: 76px;
+                    width: 98px;
+                    text: "Browse";
+                    clicked => {
+                        root.browse();
+                    }
+                }
+                Switch {
+                    y: 132px;
+                    text: "Desktop shortcut";
+                    on <=> root.desk;
+                }
+                Switch {
+                    y: 184px;
+                    text: "Start with Windows";
+                    on <=> root.boot;
+                }
+                Text {
+                    y: 244px;
+                    text: "Needs 86 MB";
+                    color: C.muted;
+                    font-size: 11px;
+                }
+                Text {
+                    x: parent.width - self.width;
+                    y: 244px;
+                    text: "212 GB free of 476 GB";
+                    color: C.muted;
+                    font-size: 11px;
+                }
+                Rectangle {
+                    y: 266px;
+                    height: 8px;
+                    border-radius: 4px;
+                    background: C.panel;
+                    Rectangle {
+                        width: root.step == 1 ? parent.width * 0.55 : 0px;
+                        border-radius: 4px;
+                        background: #3a3a46;
+                        animate width { duration: 900ms; easing: ease-out; }
+                        Rectangle {
+                            x: parent.width - 14px;
+                            width: 14px;
+                            border-radius: 4px;
+                            background: @linear-gradient(90deg, C.red 0%, C.pink 100%);
+                        }
+                    }
+                }
+                Ghost {
+                    x: 0px;
+                    y: 310px;
+                    text: "Back";
+                    clicked => {
+                        root.step = 0;
+                    }
+                }
+                Primary {
+                    x: parent.width - self.width;
+                    y: 310px;
+                    text: "Install";
+                    clicked => {
+                        root.pct = 0;
+                        root.step = 2;
+                    }
+                }
+            }
+
+            // ---------- page 2: installing (a simulation)
+            Rectangle {
+                x: 36px + (2 - root.step) * 70px;
+                y: 116px;
+                width: 440px;
+                height: 360px;
+                opacity: root.step == 2 ? 1.0 : 0.0;
+                visible: self.opacity > 0.01;
+                animate x { duration: 380ms; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+                animate opacity { duration: 300ms; }
+                Rectangle {
+                    x: (parent.width - 160px) / 2;
+                    y: 6px;
+                    width: 160px;
+                    height: 160px;
+                    Rectangle {
+                        width: parent.width;
+                        height: parent.height;
+                        border-radius: 80px;
+                        border-width: 8px;
+                        border-color: C.panel;
+                    }
+                    Rectangle {
+                        x: 14px;
+                        y: 14px;
+                        width: 132px;
+                        height: 132px;
+                        border-radius: 66px;
+                        background: @radial-gradient(circle, #f20b3633 0%, #f20b3600 100%);
+                    }
+                    Path {
+                        width: parent.width;
+                        height: parent.height;
+                        viewbox-width: 100;
+                        viewbox-height: 100;
+                        stroke: C.pink;
+                        stroke-width: 5px;
+                        stroke-line-cap: round;
+                        fill: transparent;
+                        MoveTo {
+                            x: 50;
+                            y: 4;
+                        }
+                        ArcTo {
+                            x: 50 + 46 * Math.sin(min(99.9, root.pct) / 100 * 6.2832rad);
+                            y: 50 - 46 * Math.cos(min(99.9, root.pct) / 100 * 6.2832rad);
+                            radius-x: 46;
+                            radius-y: 46;
+                            large-arc: root.pct > 50;
+                            sweep: true;
+                        }
+                    }
+                    Text {
+                        text: floor(root.pct) + "%";
+                        font-size: 34px;
+                        font-weight: 800;
+                        color: C.text;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                Rectangle {
+                    x: (parent.width - 340px) / 2;
+                    y: 196px;
+                    width: 340px;
+                    height: 8px;
+                    border-radius: 4px;
+                    background: C.panel;
+                    clip: true;
+                    Rectangle {
+                        width: parent.width * root.pct / 100;
+                        border-radius: 4px;
+                        background: @linear-gradient(90deg, C.red 0%, C.pink 100%);
+                        clip: true;
+                        Rectangle {
+                            x: -60px + ((root.t * 160px) - floor(root.t * 160 / 340) * 340px) * 1.0;
+                            width: 60px;
+                            background: @linear-gradient(90deg, #ffffff00 0%, #ffffff77 50%, #ffffff00 100%);
+                        }
+                    }
+                }
+                Text {
+                    y: 222px;
+                    width: parent.width;
+                    text: root.status;
+                    color: C.muted;
+                    font-size: 14px;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    y: 252px;
+                    width: parent.width;
+                    text: "Preview — nothing is being installed.";
+                    color: #6d6773;
+                    font-size: 11px;
+                    horizontal-alignment: center;
+                }
+            }
+
+            // ---------- page 3: done
+            Rectangle {
+                x: 36px + (3 - root.step) * 70px;
+                y: 116px;
+                width: 440px;
+                height: 360px;
+                opacity: root.step == 3 ? 1.0 : 0.0;
+                visible: self.opacity > 0.01;
+                animate x { duration: 380ms; easing: cubic-bezier(0.22, 1, 0.36, 1); }
+                animate opacity { duration: 300ms; }
+                Rectangle {
+                    x: (parent.width - 96px) / 2;
+                    y: 0px;
+                    width: 96px;
+                    height: 96px;
+                    Path {
+                        width: parent.width;
+                        height: parent.height;
+                        viewbox-width: 100;
+                        viewbox-height: 100;
+                        stroke: C.ok;
+                        stroke-width: 5px;
+                        stroke-line-cap: round;
+                        fill: transparent;
+                        MoveTo {
+                            x: 50;
+                            y: 5;
+                        }
+                        ArcTo {
+                            x: 50 + 45 * Math.sin(min(0.999, root.done-t) * 6.2832rad);
+                            y: 50 - 45 * Math.cos(min(0.999, root.done-t) * 6.2832rad);
+                            radius-x: 45;
+                            radius-y: 45;
+                            large-arc: root.done-t > 0.5;
+                            sweep: true;
+                        }
+                    }
+                    Path {
+                        width: parent.width;
+                        height: parent.height;
+                        viewbox-width: 100;
+                        viewbox-height: 100;
+                        stroke: C.ok;
+                        stroke-width: 6px;
+                        stroke-line-cap: round;
+                        stroke-line-join: round;
+                        fill: transparent;
+                        commands: "M 30 52 L 43 65 L 70 36";
+                        opacity: max(0.0, (root.done-t - 0.6) / 0.4);
+                    }
+                }
+                Text {
+                    y: 112px;
+                    width: parent.width;
+                    text: "Badzy is ready";
+                    color: C.text;
+                    font-size: 30px;
+                    font-weight: 800;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    y: 156px;
+                    width: parent.width;
+                    text: "Everything's in place. Go grab something big.";
+                    color: C.muted;
+                    font-size: 14px;
+                    horizontal-alignment: center;
+                }
+                Tick {
+                    x: 110px;
+                    y: 200px;
+                    width: 240px;
+                    text: "Launch Badzy";
+                    on <=> root.launch;
+                }
+                Tick {
+                    x: 110px;
+                    y: 236px;
+                    width: 240px;
+                    text: "Add the browser extension";
+                    on <=> root.ext;
+                }
+                Primary {
+                    x: (parent.width - self.width) / 2;
+                    y: 296px;
+                    text: "Finish";
+                    clicked => {
+                        root.quit();
+                    }
+                }
+            }
+        }
+        // preview badge
+        Rectangle {
+            x: 312px + 36px;
+            y: parent.height - 30px;
+            width: bd.preferred-width + 28px;
+            height: 22px;
+            border-radius: 11px;
+            background: C.panel;
+            border-width: 1px;
+            border-color: C.edge;
+            Rectangle {
+                x: 9px;
+                y: 8px;
+                width: 6px;
+                height: 6px;
+                border-radius: 3px;
+                background: C.ok;
+                opacity: 0.5 + 0.5 * Math.sin(root.t * 4rad);
+            }
+            bd := Text {
+                x: 22px;
+                text: "Preview only - installs nothing";
+                color: C.muted;
+                font-size: 10px;
+                vertical-alignment: center;
+                height: parent.height;
+            }
+        }
+        // top accent line + border
+        Rectangle {
+            height: 3px;
+            background: @linear-gradient(90deg, C.red 0%, C.pink 50%, C.red 100%);
+        }
+        Rectangle {
+            border-radius: 22px;
+            border-width: 1px;
+            border-color: C.red.transparentize(0.65);
+        }
+    }
+}

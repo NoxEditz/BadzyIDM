@@ -1,0 +1,25 @@
+[package]
+name = "badzy-setup"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Badzy setup (design preview, installs nothing)"
+build = "build.rs"
+
+[[bin]]
+name = "Badzy-Setup-Preview"
+path = "src/main.rs"
+
+[dependencies]
+slint = { version = "~1.18", features = ["raw-window-handle-06", "unstable-winit-030"] }
+rfd = "0.15"
+
+[build-dependencies]
+slint-build = "~1.18"
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
+[target.'cfg(windows)'.dependencies]
+raw-window-handle = "0.6"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging"] }
