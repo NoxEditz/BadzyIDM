@@ -46,7 +46,7 @@ SolidCompression=yes
 WizardStyle=modern
 ; Badzy look: dark/red banner on the left, logo in the page corner
 WizardImageFile=wizard-large-100.bmp,wizard-large-150.bmp,wizard-large-200.bmp
-WizardSmallImageFile=wizard-small.bmp
+WizardSmallImageFile=wizard-small-55.bmp,wizard-small-83.bmp,wizard-small-110.bmp
 DisableWelcomePage=no
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -57,10 +57,19 @@ RestartApplications=no
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Messages]
-WelcomeLabel1=Welcome to Badzy
-WelcomeLabel2=Badzy is a fast download manager for Windows. It splits files into several connections, resumes broken downloads and grabs videos from the web.%n%nThis wizard installs Badzy for your Windows account. No administrator rights are needed.%n%nClick Next to continue.
+WelcomeLabel1=Meet Badzy
+WelcomeLabel2=Faster downloads, videos that just work, and a window that feels good to use.%n%nBadzy splits every file into several connections, resumes broken downloads, grabs videos from the web (with ffmpeg built in) and catches downloads from your browser.%n%nThis setup installs Badzy for your Windows account only. No administrator rights are needed.
+SelectDirLabel3=Badzy will be installed in this folder.
+SelectDirBrowseLabel=Click Next to continue, or Browse to pick another folder.
+SelectTasksLabel2=Pick the extras you want, then click Next.
+ReadyLabel1=Everything is ready.
+ReadyLabel2a=Click Install to put Badzy on your computer.
+ReadyLabel2b=Click Install to put Badzy on your computer with these choices:
+InstallingLabel=Setting Badzy up, one moment...
 FinishedHeadingLabel=Badzy is ready
-FinishedLabel=Badzy has been installed. Add its browser extension from the app's first screen so it can catch your downloads.
+FinishedLabel=Badzy has been installed.%n%nOpen it, then add the browser extension from the first screen so your browser hands downloads to Badzy.
+ButtonInstall=&Install
+ButtonFinish=&Finish
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"
@@ -154,6 +163,47 @@ begin
     program still works, it carries its own copy of these files. }
   ShellExec('runas', ExpandConstant('{tmp}\vc_redist.x64.exe'), '/install /quiet /norestart', '', SW_HIDE, ewWaitUntilTerminated, Code);
 #endif
+end;
+
+{ the wizard in the colours of the program: near-black with red accents }
+procedure Recolor(Parent: TWinControl);
+var
+  i: Integer;
+  C: TControl;
+begin
+  for i := 0 to Parent.ControlCount - 1 do
+  begin
+    C := Parent.Controls[i];
+    if C is TNewStaticText then
+      TNewStaticText(C).Font.Color := $F7EFF4;
+    if C is TNewCheckBox then
+      TNewCheckBox(C).Font.Color := $F7EFF4;
+    if C is TNewRadioButton then
+      TNewRadioButton(C).Font.Color := $F7EFF4;
+    if C is TPanel then
+      TPanel(C).Color := $0F0908;
+    if C is TWinControl then
+      Recolor(TWinControl(C));
+  end;
+end;
+
+procedure InitializeWizard;
+begin
+  WizardForm.Color := $0F0908;
+  WizardForm.InnerPage.Color := $0F0908;
+  WizardForm.MainPanel.Color := $181812;
+  WizardForm.WelcomePage.Color := $0F0908;
+  WizardForm.FinishedPage.Color := $0F0908;
+  WizardForm.PageNameLabel.Font.Color := $F7EFF4;
+  WizardForm.PageDescriptionLabel.Font.Color := $AA9AA1;
+  WizardForm.PageNameLabel.Font.Style := [fsBold];
+  WizardForm.WelcomeLabel1.Font.Size := 20;
+  WizardForm.WelcomeLabel1.Font.Style := [fsBold];
+  WizardForm.FinishedHeadingLabel.Font.Size := 20;
+  WizardForm.FinishedHeadingLabel.Font.Style := [fsBold];
+  Recolor(WizardForm);
+  WizardForm.WelcomeLabel1.Font.Color := $360BF2;
+  WizardForm.FinishedHeadingLabel.Font.Color := $360BF2;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
