@@ -3,7 +3,7 @@
 // rounded download list, one progress window per download. Nine themes.
 
 import { Button, LineEdit, SpinBox, ComboBox, ListView, TabWidget, TextEdit, Palette } from "std-widgets.slint";
-import { ToolTip, DownloadRow, QueueRow, SegView, Cols, ColDef, CatRow, PairRow, LinkRow, Theme, ThemedWindow, CaptionButton, P, Icon, G, TypeIcon, BigTypeIcon, ToolBtn, ToolSeparator, TreeItem, HeaderCell, Cell, MenuEntry, MenuSep, MenuLabel, Glyph, HRow, CheckBox } from "common.slint";
+import { Icons, ToolTip, DownloadRow, QueueRow, SegView, Cols, ColDef, CatRow, PairRow, LinkRow, Theme, ThemedWindow, CaptionButton, P, G, TypeIcon, BigTypeIcon, ToolBtn, ToolSeparator, TreeItem, HeaderCell, Cell, MenuEntry, MenuSep, MenuLabel, Glyph, HRow, CheckBox } from "common.slint";
 export { DownloadRow, QueueRow, SegView, Cols, ColDef, CatRow, PairRow, LinkRow, Theme }
 export { BrowserRow } from "dialogs.slint";
 export { ConfirmDialog, ColumnsDialog, CategoryDialog, FindDialog, PropertiesDialog, DuplicateDialog, CountdownDialog, SchedulerDialog, GrabberDialog, TipDialog, RefreshDialog, SettingsDialog, PlaylistDialog, TorrentDialog, BrowserDialog, AboutDialog, UpdateDialog, WhatsNewDialog } from "dialogs.slint";
@@ -556,11 +556,13 @@ component Chip inherits Rectangle {
         padding-right: 4px;
         Rectangle {
             height: 26px;
-            if root.all: Icon {
-                kind: "folder";
-                x: (parent.width - 26px) / 2;
-                width: 26px;
-                height: 26px;
+            if root.all: Image {
+                source: @image-url("icons/apps.svg");
+                colorize: root.selected ? Theme.accent : Theme.muted;
+                x: (parent.width - 24px) / 2;
+                y: 1px;
+                width: 24px;
+                height: 24px;
             }
             if !root.all: TypeIcon {
                 kind: root.kind;
