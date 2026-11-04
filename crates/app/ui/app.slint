@@ -248,6 +248,7 @@ component DownloadItem inherits Rectangle {
         // the columns in the order and widths of the header
         for c in root.columns: Rectangle {
             width: c.width;
+            visible: c.width > 0px;
             // clip: long right-to-left (Arabic) names must never spill over
             clip: true;
             if c.key == "name": Cell {
@@ -478,6 +479,7 @@ component CtxTreeItem inherits TreeItem {
 // an entry of the left navigation
 component NavItem inherits Rectangle {
     in property <image> icon;
+    in property <bool> narrow;
     in property <string> text;
     in property <bool> selected;
     callback clicked();
@@ -495,12 +497,15 @@ component NavItem inherits Rectangle {
         }
     }
     HRow {
-        padding-left: 14px;
-        padding-right: 14px;
-        spacing: 12px;
+        padding-left: root.narrow ? 0px : 14px;
+        padding-right: root.narrow ? 0px : 14px;
+        spacing: root.narrow ? 0px : 12px;
         Rectangle {
-            width: 20px;
+            preferred-width: 20px;
+            min-width: 20px;
+            horizontal-stretch: root.narrow ? 1 : 0;
             Image {
+                x: (parent.width - 20px) / 2;
                 y: (parent.height - 20px) / 2;
                 width: 20px;
                 height: 20px;
@@ -509,7 +514,7 @@ component NavItem inherits Rectangle {
                 animate colorize { duration: 160ms; }
             }
         }
-        Text {
+        if !root.narrow: Text {
             horizontal-alignment: Theme.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
             text: root.text;
             vertical-alignment: center;
@@ -699,6 +704,16 @@ export component MainWindow inherits ThemedWindow {
     in property <string> disk-free;
     in property <float> disk-frac;
     in-out property <bool> drawer-open: false;
+    // the downloads that are running now (shown in the side card)
+    in property <[DownloadRow]> active-rows;
+    // the list tells Rust how wide it is, Rust answers with the columns that fit
+    callback list-resized(length);
+    // window size classes: the layout adapts instead of cutting things off
+    // (measured by a probe below: reading root.width inside the layout would loop)
+    in-out property <length> win-w: 1120px;
+    out property <bool> compact: root.win-w < 1000px;
+    out property <bool> show-side: root.win-w >= 1120px;
+    out property <length> nav-w: root.win-w < 920px ? 64px : root.win-w < 1200px ? 176px : 196px;
     property <float> drawer-t: root.drawer-open ? 1.0 : 0.0;
     animate drawer-t { duration: 280ms; easing: ease-out; }
     // 0 -> 1 when the window opens: the parts fade in one after another
@@ -1089,11 +1104,14 @@ export component MainWindow inherits ThemedWindow {
                 spacing: 12px;
                 // ---- left navigation
                 Rectangle {
-                    width: 196px;
+                    width: root.nav-w;
+                    animate width { duration: 200ms; easing: ease-out; }
+                    clip: true;
                     VerticalLayout {
                         spacing: 4px;
                         padding-top: 2px;
                         NavItem {
+                            narrow: root.nav-w < 100px;
                             icon: @image-url("icons/home.svg");
                             text: @tr("All Downloads");
                             selected: root.view == "all";
@@ -1103,6 +1121,7 @@ export component MainWindow inherits ThemedWindow {
                             }
                         }
                         NavItem {
+                            narrow: root.nav-w < 100px;
                             icon: @image-url("icons/download.svg");
                             text: @tr("Unfinished");
                             selected: root.view == "unfinished";
@@ -1112,6 +1131,7 @@ export component MainWindow inherits ThemedWindow {
                             }
                         }
                         NavItem {
+                            narrow: root.nav-w < 100px;
                             icon: @image-url("icons/check.svg");
                             text: @tr("Finished");
                             selected: root.view == "finished";
@@ -1121,6 +1141,7 @@ export component MainWindow inherits ThemedWindow {
                             }
                         }
                         NavItem {
+                            narrow: root.nav-w < 100px;
                             icon: @image-url("icons/clock.svg");
                             text: @tr("Scheduler");
                             clicked => {
@@ -1128,6 +1149,7 @@ export component MainWindow inherits ThemedWindow {
                             }
                         }
                         NavItem {
+                            narrow: root.nav-w < 100px;
                             icon: @image-url("icons/globe.svg");
                             text: @tr("Grabber");
                             clicked => {
@@ -1135,6 +1157,7 @@ export component MainWindow inherits ThemedWindow {
                             }
                         }
                         NavItem {
+                            narrow: root.nav-w < 100px;
                             icon: @image-url("icons/list.svg");
                             text: @tr("Playlist");
                             clicked => {
@@ -1142,6 +1165,7 @@ export component MainWindow inherits ThemedWindow {
                             }
                         }
                         NavItem {
+                            narrow: root.nav-w < 100px;
                             icon: @image-url("icons/magnet.svg");
                             text: @tr("Torrent");
                             clicked => {
@@ -1149,6 +1173,7 @@ export component MainWindow inherits ThemedWindow {
                             }
                         }
                         NavItem {
+                            narrow: root.nav-w < 100px;
                             icon: @image-url("icons/external-link.svg");
                             text: @tr("Add Badzy to my browser…");
                             clicked => {
@@ -1156,6 +1181,7 @@ export component MainWindow inherits ThemedWindow {
                             }
                         }
                         NavItem {
+                            narrow: root.nav-w < 100px;
                             icon: @image-url("icons/settings.svg");
                             text: @tr("Options");
                             clicked => {
@@ -1165,7 +1191,7 @@ export component MainWindow inherits ThemedWindow {
                         Rectangle {
                             vertical-stretch: 1;
                             clip: true;
-                            Image {
+                            if root.nav-w > 100px: Image {
                                 x: 0px;
                                 y: parent.height - self.height - 52px;
                                 width: parent.width;
@@ -1175,7 +1201,7 @@ export component MainWindow inherits ThemedWindow {
                                 image-rendering: smooth;
                                 opacity: 0.9 * root.intro;
                             }
-                            Image {
+                            if root.nav-w > 100px: Image {
                                 x: 10px;
                                 y: parent.height - self.height - 2px;
                                 width: parent.width - 20px;
@@ -1296,22 +1322,6 @@ export component MainWindow inherits ThemedWindow {
                     }
                     ToolSeparator { }
                     ToolBtn {
-                        icon: "options";
-                        text: @tr("Options");
-                        small: true;
-                        clicked => {
-                            root.open-settings(0);
-                        }
-                    }
-                    ToolBtn {
-                        icon: "scheduler";
-                        text: @tr("Scheduler");
-                        small: true;
-                        clicked => {
-                            root.open-scheduler();
-                        }
-                    }
-                    ToolBtn {
                         icon: "limiter";
                         text: root.limiter-on ? @tr("Limiter: On") : @tr("Limiter: Off");
                         small: true;
@@ -1342,31 +1352,6 @@ export component MainWindow inherits ThemedWindow {
                             queue-menu.show();
                         }
                     }
-                    ToolSeparator { }
-                    ToolBtn {
-                        icon: "grabber";
-                        text: @tr("Grabber");
-                        small: true;
-                        clicked => {
-                            root.grabber();
-                        }
-                    }
-                    ToolBtn {
-                        icon: "playlist";
-                        text: @tr("Playlist");
-                        small: true;
-                        clicked => {
-                            root.playlist();
-                        }
-                    }
-                    ToolBtn {
-                        icon: "torrent";
-                        text: @tr("Torrent");
-                        small: true;
-                        clicked => {
-                            root.torrent();
-                        }
-                    }
                     Rectangle {
                         horizontal-stretch: 1;
                     }
@@ -1386,7 +1371,7 @@ export component MainWindow inherits ThemedWindow {
                 Rectangle {
                     vertical-stretch: 1;
                     horizontal-stretch: 1;
-                    min-width: 300px;
+                    min-width: 0px;
                     clip: true;
                     background: Theme.panel.transparentize(0.12);
                     border-radius: 16px;
@@ -1394,6 +1379,12 @@ export component MainWindow inherits ThemedWindow {
                     border-color: Theme.line;
                     opacity: root.intro;
                     transform-scale: 0.98 + 0.02 * root.intro;
+                    init => {
+                        root.list-resized(self.width);
+                    }
+                    changed width => {
+                        root.list-resized(self.width);
+                    }
                     VerticalLayout {
                         padding: 1px;
                         Rectangle {
@@ -1412,7 +1403,8 @@ export component MainWindow inherits ThemedWindow {
                                 }
                                 for c[i] in root.columns: HeaderCell {
                                     width: c.width;
-                                    adjustable: true;
+                                    visible: c.width > 0px;
+                                    adjustable: c.key != "name";
                                     text: root.col-title(c.key);
                                     key: root.col-sort-key(c.key);
                                     align: c.key == "size" || c.key == "eta" || c.key == "speed" ? TextHorizontalAlignment.right : c.key == "q" || c.key == "status" || c.key == "last" || c.key == "added" ? TextHorizontalAlignment.center : TextHorizontalAlignment.left;
@@ -1502,8 +1494,8 @@ export component MainWindow inherits ThemedWindow {
                     }
                 }
                 // ---- right panel
-                VerticalLayout {
-                    width: 300px;
+                if root.show-side: VerticalLayout {
+                    width: root.win-w < 1300px ? 260px : 300px;
                     spacing: 12px;
                 // ---- tree
                 if !root.hide-categories: Rectangle {
@@ -1710,9 +1702,8 @@ export component MainWindow inherits ThemedWindow {
                                     horizontal-alignment: Theme.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
                                 }
                             }
-                            for r in root.rows: Rectangle {
-                                visible: r.state == 1;
-                                height: r.state == 1 ? 50px : 0px;
+                            for r in root.active-rows: Rectangle {
+                                height: 50px;
                                 clip: true;
                                 Text {
                                     x: 0px;
@@ -1776,7 +1767,14 @@ export component MainWindow inherits ThemedWindow {
                                     }
                                 }
                             }
-                            if root.sel-count < 0: Rectangle { }
+                            if root.active-rows.length == 0: Text {
+                                height: 30px;
+                                text: @tr("Nothing is downloading right now.");
+                                font-size: 12px * Theme.font-scale;
+                                color: Theme.muted;
+                                vertical-alignment: center;
+                                horizontal-alignment: Theme.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+                            }
                         }
                     }
                     // ---- disk
@@ -1888,20 +1886,22 @@ export component MainWindow inherits ThemedWindow {
         }
     }
 
-    // starts the intro animation when the window opens
+    // starts the intro animation when the window opens, and measures the window
     Rectangle {
-        width: 0px;
+        width: root.width;
         height: 0px;
         init => {
             root.intro = 1.0;
+            root.win-w = self.width;
+        }
+        changed width => {
+            root.win-w = self.width;
         }
     }
     // ---- the menu: slides in from the side over a dimmed window
     if root.drawer-t > 0.001: Rectangle {
         width: root.width;
         height: root.height;
-        background: #000000;
-        opacity: 0.0;
         Rectangle {
             width: parent.width;
             height: parent.height;
