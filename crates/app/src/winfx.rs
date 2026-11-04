@@ -81,6 +81,8 @@ fn place_now(w: &slint::Window, maximizable: bool) -> bool {
     let placed = w.with_winit_window(|win: &winit::window::Window| place_winit(win, maximizable)).is_some();
     if placed {
         apply_icons(w);
+        // the thin coloured border is drawn by the window itself (follows the theme)
+        round_corners(w, None);
     }
     placed
 }
@@ -350,6 +352,52 @@ pub(crate) fn drag_resize_window(w: &slint::Window) {
         let _ = win.drag_resize_window(winit::window::ResizeDirection::SouthEast);
     });
 }
+
+/// Resize from an edge or corner: 0 N, 1 S, 2 E, 3 W, 4 NE, 5 NW, 6 SE, 7 SW.
+#[cfg(windows)]
+pub(crate) fn resize_edge(w: &slint::Window, dir: i32) {
+    use slint::winit_030::{winit, WinitWindowAccessor};
+    use winit::window::ResizeDirection as D;
+    let d = match dir {
+        0 => D::North,
+        1 => D::South,
+        2 => D::East,
+        3 => D::West,
+        4 => D::NorthEast,
+        5 => D::NorthWest,
+        6 => D::SouthEast,
+        _ => D::SouthWest,
+    };
+    w.with_winit_window(|win: &winit::window::Window| {
+        let _ = win.drag_resize_window(d);
+    });
+}
+
+#[cfg(not(windows))]
+pub(crate) fn resize_edge(_w: &slint::Window, _dir: i32) {}
+
+/// Rounded corners and a thin accent border around the window (Windows 11;
+/// older Windows ignores both and keeps square corners).
+#[cfg(windows)]
+pub(crate) fn round_corners(w: &slint::Window, border: Option<u32>) {
+    use windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute;
+    let Some(hwnd) = hwnd_of(w) else { return };
+    const DWMWA_WINDOW_CORNER_PREFERENCE: u32 = 33;
+    const DWMWA_BORDER_COLOR: u32 = 34;
+    const DWMWCP_ROUND: i32 = 2;
+    // SAFETY: plain DWM calls with a pointer to a local value of the size given.
+    unsafe {
+        let pref = DWMWCP_ROUND;
+        DwmSetWindowAttribute(hwnd as _, DWMWA_WINDOW_CORNER_PREFERENCE, &pref as *const i32 as *const _, 4);
+        if let Some(rgb) = border {
+            // COLORREF is 0x00BBGGRR
+            DwmSetWindowAttribute(hwnd as _, DWMWA_BORDER_COLOR, &rgb as *const u32 as *const _, 4);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+pub(crate) fn round_corners(_w: &slint::Window, _border: Option<u32>) {}
 
 #[cfg(not(windows))]
 pub(crate) fn drag_window(_w: &slint::Window) {}

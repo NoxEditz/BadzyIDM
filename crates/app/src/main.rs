@@ -504,6 +504,41 @@ fn main() -> anyhow::Result<()> {
             slint::CloseRequestResponse::HideWindow
         });
     }
+    // its own title bar: drag, minimize, maximize, close, resize from the edges
+    {
+        let w = main.as_weak();
+        main.on_win_drag(move || {
+            if let Some(m) = w.upgrade() {
+                winfx::drag_window(m.window());
+            }
+        });
+        let w = main.as_weak();
+        main.on_win_min(move || {
+            if let Some(m) = w.upgrade() {
+                m.window().set_minimized(true);
+            }
+        });
+        let w = main.as_weak();
+        main.on_win_max(move || {
+            if let Some(m) = w.upgrade() {
+                let now = !m.window().is_maximized();
+                m.window().set_maximized(now);
+                m.set_is_max(now);
+            }
+        });
+        let w = main.as_weak();
+        main.on_win_close(move || {
+            if let Some(m) = w.upgrade() {
+                m.window().dispatch_event(slint::platform::WindowEvent::CloseRequested);
+            }
+        });
+        let w = main.as_weak();
+        main.on_win_resize(move |dir| {
+            if let Some(m) = w.upgrade() {
+                winfx::resize_edge(m.window(), dir);
+            }
+        });
+    }
     // after an update: what is new, once, in the language of the program
     let mut just_updated = false;
     {

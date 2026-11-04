@@ -666,6 +666,15 @@ export component MainWindow inherits ThemedWindow {
     preferred-height: 680px;
     min-width: 760px;
     min-height: 440px;
+    // its own rounded title bar (the Windows frame is not drawn)
+    no-frame: true;
+    in-out property <bool> is-max;
+    callback win-drag();
+    callback win-min();
+    callback win-max();
+    callback win-close();
+    // which edge is dragged: 0 N, 1 S, 2 E, 3 W, 4 NE, 5 NW, 6 SE, 7 SW
+    callback win-resize(int);
 
     in property <[DownloadRow]> rows;
     in property <[QueueRow]> queues;
@@ -933,6 +942,75 @@ export component MainWindow inherits ThemedWindow {
         }
 
         VerticalLayout {
+            // ---- title strip: drag here, window buttons
+            Rectangle {
+                height: 34px;
+                background: Theme.window;
+                Rectangle {
+                    width: parent.width;
+                    height: 3px;
+                    y: 0px;
+                    background: @linear-gradient(90deg, Theme.accent 0%, Theme.accent2 50%, Theme.accent 100%);
+                }
+                HRow {
+                    padding-top: 3px;
+                    spacing: 0px;
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        TouchArea {
+                            pointer-event(ev) => {
+                                if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
+                                    root.win-drag();
+                                }
+                            }
+                            double-clicked => {
+                                root.win-max();
+                            }
+                        }
+                        HRow {
+                            padding-left: Theme.rtl ? 0px : 14px;
+                            padding-right: Theme.rtl ? 14px : 0px;
+                            spacing: 8px;
+                            Rectangle {
+                                width: 16px;
+                                Image {
+                                    y: (parent.height - 16px) / 2;
+                                    width: 16px;
+                                    height: 16px;
+                                    source: @image-url("icon-window.png");
+                                }
+                            }
+                            Text {
+                                text: @tr("Badzy");
+                                vertical-alignment: center;
+                                font-size: 12px * Theme.font-scale;
+                                font-weight: 700;
+                                color: Theme.muted;
+                                horizontal-stretch: 1;
+                                horizontal-alignment: Theme.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+                            }
+                        }
+                    }
+                    CaptionButton {
+                        kind: "min";
+                        clicked => {
+                            root.win-min();
+                        }
+                    }
+                    CaptionButton {
+                        kind: root.is-max ? "restore" : "max";
+                        clicked => {
+                            root.win-max();
+                        }
+                    }
+                    CaptionButton {
+                        kind: "close";
+                        clicked => {
+                            root.win-close();
+                        }
+                    }
+                }
+            }
             // ---- top bar: menu, logo, search
             Rectangle {
                 height: 72px;
@@ -1899,6 +1977,39 @@ export component MainWindow inherits ThemedWindow {
         }
         changed width => {
             root.win-w = self.width;
+        }
+    }
+    // ---- the thin border of the window and its grips to resize it
+    Rectangle {
+        border-width: 1px;
+        border-color: Theme.accent.transparentize(0.65);
+        background: transparent;
+    }
+    if !root.is-max: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        for e[i] in [
+            { x: 10px, y: 0px, w: root.width - 20px, h: 4px, dir: 0, cur: 0 },
+            { x: 10px, y: root.height - 4px, w: root.width - 20px, h: 4px, dir: 1, cur: 0 },
+            { x: root.width - 4px, y: 10px, w: 4px, h: root.height - 20px, dir: 2, cur: 1 },
+            { x: 0px, y: 10px, w: 4px, h: root.height - 20px, dir: 3, cur: 1 },
+            { x: root.width - 10px, y: 0px, w: 10px, h: 10px, dir: 4, cur: 2 },
+            { x: 0px, y: 0px, w: 10px, h: 10px, dir: 5, cur: 3 },
+            { x: root.width - 10px, y: root.height - 10px, w: 10px, h: 10px, dir: 6, cur: 3 },
+            { x: 0px, y: root.height - 10px, w: 10px, h: 10px, dir: 7, cur: 2 },
+        ]: TouchArea {
+            x: e.x;
+            y: e.y;
+            width: e.w;
+            height: e.h;
+            mouse-cursor: e.cur == 0 ? MouseCursor.ns-resize : e.cur == 1 ? MouseCursor.ew-resize : e.cur == 2 ? MouseCursor.nesw-resize : MouseCursor.nwse-resize;
+            pointer-event(ev) => {
+                if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
+                    root.win-resize(e.dir);
+                }
+            }
         }
     }
     // ---- the menu: slides in from the side over a dimmed window
