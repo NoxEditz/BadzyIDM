@@ -494,6 +494,15 @@ export global Icons {
         if (k == "close") { return @image-url("icons/close.svg"); }
         return @image-url("icons/files.svg");
     }
+    // the big picture of a file kind (add-download window)
+    pure public function card(k: string) -> image {
+        if (k == "video") { return @image-url("art/card-video.svg"); }
+        if (k == "audio") { return @image-url("art/card-audio.svg"); }
+        if (k == "archive") { return @image-url("art/card-zip.svg"); }
+        if (k == "exe" || k == "apk") { return @image-url("art/card-program.svg"); }
+        if (k == "image") { return @image-url("art/card-image.svg"); }
+        return @image-url("art/card-document.svg");
+    }
     // file-type tiles (each with its own colour)
     pure public function type(k: string) -> image {
         if (k == "video") { return @image-url("types/video.svg"); }

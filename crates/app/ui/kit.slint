@@ -275,3 +275,25 @@ export component SpinBox inherits Rectangle {
         }
     }
 }
+
+// a field with its title above it
+export component Field inherits VerticalLayout {
+    in property <string> label;
+    spacing: 6px;
+    Text {
+        text: root.label;
+        font-size: 11px * Theme.font-scale;
+        font-weight: 700;
+        color: Theme.muted;
+        horizontal-alignment: Theme.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+    }
+    @children
+}
+
+// a rounded panel that groups controls
+export component Panel inherits Rectangle {
+    background: Theme.panel.transparentize(0.1);
+    border-radius: 14px;
+    border-width: 1px;
+    border-color: Theme.line;
+}
