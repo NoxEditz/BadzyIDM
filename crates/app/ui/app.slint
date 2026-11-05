@@ -1344,6 +1344,7 @@ export component MainWindow inherits ThemedWindow {
                         icon: "add";
                         text: @tr("Add URL");
                         small: true;
+                        look: "primary";
                         clicked => {
                             root.add-url();
                         }
@@ -1352,6 +1353,7 @@ export component MainWindow inherits ThemedWindow {
                         icon: "batch";
                         text: @tr("Add Batch");
                         small: true;
+                        look: root.win-w < 1180px ? "icon" : "labeled";
                         clicked => {
                             root.add-batch();
                         }
@@ -1406,6 +1408,7 @@ export component MainWindow inherits ThemedWindow {
                         icon: "limiter";
                         text: root.limiter-on ? @tr("Limiter: On") : @tr("Limiter: Off");
                         small: true;
+                        look: root.win-w < 1180px ? "icon" : "labeled";
                         clicked => {
                             root.toggle-limiter();
                         }
@@ -1415,7 +1418,7 @@ export component MainWindow inherits ThemedWindow {
                         icon: "startqueue";
                         text: @tr("Start Queue");
                         small: true;
-                        width: 38px;
+                        look: root.win-w < 1180px ? "icon" : "labeled";
                         clicked => {
                             root.qmenu-start = true;
                             root.qmenu-x = self.x;
@@ -1426,7 +1429,7 @@ export component MainWindow inherits ThemedWindow {
                         icon: "stopqueue";
                         text: @tr("Stop Queue");
                         small: true;
-                        width: 38px;
+                        look: root.win-w < 1180px ? "icon" : "labeled";
                         clicked => {
                             root.qmenu-start = false;
                             root.qmenu-x = self.x;

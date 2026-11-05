@@ -577,15 +577,21 @@ export component ToolBtn inherits Rectangle {
     in property <bool> enabled: true;
     // View > Toolbar > Small buttons: icon only
     in property <bool> small;
+    // "icon" (icon only / icon over name), "primary" (red button with name) or
+    // "labeled" (outlined button with icon and name)
+    in property <string> look: "icon";
     callback clicked();
+    property <bool> wide: root.look != "icon";
     // small buttons: every one fits a 960 px wide window
-    width: root.small ? 38px : 60px;
-    height: root.small ? 38px : 58px;
+    width: root.wide ? wl.preferred-width + 50px : root.small ? 38px : 60px;
+    height: root.wide ? 36px : root.small ? 38px : 58px;
     // a name that is still too long never covers the next button
     clip: true;
     border-radius: 12px;
-    background: !root.enabled ? transparent : ta.pressed ? Theme.select : ta.has-hover ? Theme.toolbar-hover : transparent;
-    transform-scale: !root.enabled ? 1.0 : ta.pressed ? 0.93 : ta.has-hover ? 1.05 : 1.0;
+    background: root.look == "primary" ? @linear-gradient(90deg, Theme.accent 0%, Theme.accent2 100%) : root.look == "labeled" ? (ta.has-hover && root.enabled ? Theme.hover : Theme.input-bg) : !root.enabled ? transparent : ta.pressed ? Theme.select : ta.has-hover ? Theme.toolbar-hover : transparent;
+    border-width: root.look == "labeled" ? 1px : 0px;
+    border-color: ta.has-hover && root.enabled ? Theme.accent : Theme.line;
+    transform-scale: !root.enabled ? 1.0 : ta.pressed ? 0.93 : ta.has-hover ? 1.04 : 1.0;
     animate background { duration: 160ms; easing: ease-out; }
     animate transform-scale { duration: 140ms; easing: ease-out; }
     // what the button does, shown when the mouse rests on it
@@ -637,7 +643,28 @@ export component ToolBtn inherits Rectangle {
             }
         }
     }
-    if !root.small: VerticalLayout {
+    if root.wide: Image {
+        x: 14px;
+        y: (parent.height - 16px) / 2;
+        width: 16px;
+        height: 16px;
+        source: Icons.tool(root.icon);
+        colorize: root.look == "primary" ? #ffffff : Theme.muted;
+        opacity: root.enabled ? 1.0 : 0.4;
+    }
+    wl := Text {
+        visible: root.wide;
+        x: 36px;
+        y: 0px;
+        height: parent.height;
+        text: root.wide ? root.text : "";
+        vertical-alignment: center;
+        font-size: 13px * Theme.font-scale;
+        font-weight: root.look == "primary" ? 700 : 600;
+        color: root.look == "primary" ? #ffffff : Theme.text;
+        opacity: root.enabled ? 1.0 : 0.4;
+    }
+    if !root.small && !root.wide: VerticalLayout {
         alignment: center;
         spacing: 3px;
         padding-left: 1px;
@@ -667,7 +694,7 @@ export component ToolBtn inherits Rectangle {
             color: Theme.toolbar-text;
         }
     }
-    if root.small: Image {
+    if root.small && !root.wide: Image {
         x: (parent.width - 22px) / 2;
         y: (parent.height - 22px) / 2;
         width: 22px;
