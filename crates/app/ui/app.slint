@@ -683,6 +683,13 @@ export component MainWindow inherits ThemedWindow {
     callback win-min();
     callback win-max();
     callback win-close();
+    callback win-resized();
+    changed width => {
+        root.win-resized();
+    }
+    changed height => {
+        root.win-resized();
+    }
     // which edge is dragged: 0 N, 1 S, 2 E, 3 W, 4 NE, 5 NW, 6 SE, 7 SW
     callback win-resize(int);
 
@@ -2203,10 +2210,11 @@ export component AddDialog inherits ThemedWindow {
     in property <bool> front;
     always-on-top: root.front;
     title: @tr("Download File Info");
-    preferred-width: 700px;
-    preferred-height: 600px;
-    min-width: 540px;
-    min-height: 420px;
+    no-frame: true;
+    width: 700px;
+    height: 620px;
+    callback drag();
+    callback minimize();
 
     in-out property <string> url;
     // full path: folder + file name
@@ -2249,6 +2257,65 @@ export component AddDialog inherits ThemedWindow {
 
     VerticalLayout {
         spacing: 0px;
+        // ---- title strip (own frame)
+        Rectangle {
+            height: 38px;
+            background: Theme.panel;
+            Rectangle {
+                width: parent.width;
+                height: 3px;
+                background: @linear-gradient(90deg, Theme.accent 0%, Theme.accent2 50%, Theme.accent 100%);
+            }
+            HRow {
+                padding-top: 3px;
+                spacing: 0px;
+                Rectangle {
+                    horizontal-stretch: 1;
+                    TouchArea {
+                        pointer-event(ev) => {
+                            if (ev.button == PointerEventButton.left && ev.kind == PointerEventKind.down) {
+                                root.drag();
+                            }
+                        }
+                    }
+                    HRow {
+                        padding-left: Theme.rtl ? 0px : 14px;
+                        padding-right: Theme.rtl ? 14px : 0px;
+                        spacing: 8px;
+                        Rectangle {
+                            width: 16px;
+                            Image {
+                                y: (parent.height - 16px) / 2;
+                                width: 16px;
+                                height: 16px;
+                                source: @image-url("icon-window.png");
+                            }
+                        }
+                        Text {
+                            text: @tr("Download File Info") + " — Badzy";
+                            vertical-alignment: center;
+                            font-size: 12px * Theme.font-scale;
+                            font-weight: 700;
+                            color: Theme.text;
+                            horizontal-stretch: 1;
+                            horizontal-alignment: Theme.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+                        }
+                    }
+                }
+                CaptionButton {
+                    kind: "min";
+                    clicked => {
+                        root.minimize();
+                    }
+                }
+                CaptionButton {
+                    kind: "close";
+                    clicked => {
+                        root.cancel();
+                    }
+                }
+            }
+        }
         Flickable {
             vertical-stretch: 1;
             content-height: form.preferred-height;
@@ -2272,6 +2339,7 @@ export component AddDialog inherits ThemedWindow {
                         }
                     }
                     VerticalLayout {
+                        horizontal-stretch: 0;
                         alignment: end;
                         Button {
                             text: root.probing ? "…" : @tr("Check");
@@ -2404,6 +2472,7 @@ export component AddDialog inherits ThemedWindow {
                         }
                     }
                     VerticalLayout {
+                        horizontal-stretch: 0;
                         alignment: end;
                         Button {
                             text: @tr("Browse");
@@ -2528,6 +2597,11 @@ export component AddDialog inherits ThemedWindow {
                 }
             }
         }
+    }
+    Rectangle {
+        border-width: 1px;
+        border-color: Theme.accent.transparentize(0.65);
+        background: transparent;
     }
 }
 

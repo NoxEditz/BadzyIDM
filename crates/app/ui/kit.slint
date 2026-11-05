@@ -10,6 +10,7 @@ export component Button inherits Rectangle {
     in property <image> icon;
     in property <bool> enabled: true;
     callback clicked();
+    horizontal-stretch: 0;
     min-width: max(72px, lbl.preferred-width + 28px);
     preferred-width: lbl.preferred-width + 28px + (root.icon.width > 0 ? 24px : 0px);
     height: 36px;
@@ -82,7 +83,9 @@ export component LineEdit inherits Rectangle {
     }
     ti := TextInput {
         x: root.icon.width > 0 && !Theme.rtl ? 34px : 12px;
-        y: (parent.height - self.height) / 2;
+        y: 0px;
+        height: parent.height;
+        vertical-alignment: center;
         width: parent.width - (root.icon.width > 0 ? 46px : 24px);
         enabled: root.enabled;
         read-only: root.read-only;
@@ -226,71 +229,78 @@ export component SpinBox inherits Rectangle {
             ti.text = root.value;
         }
     }
-    HRow {
-        Rectangle {
-            width: 30px;
-            background: m.has-hover ? Theme.hover : transparent;
-            border-radius: 9px;
-            Image {
-                x: 7px;
-                y: (parent.height - 16px) / 2;
-                width: 16px;
-                height: 16px;
-                source: @image-url("icons/minus.svg");
-                colorize: root.value <= root.minimum ? Theme.line : Theme.muted;
-            }
-            m := TouchArea {
-                enabled: root.enabled;
-                clicked => {
-                    root.set(root.value - root.step-size);
-                }
+    Rectangle {
+        x: 3px;
+        y: 3px;
+        width: 30px;
+        height: parent.height - 6px;
+        background: m.has-hover ? Theme.hover : transparent;
+        border-radius: 8px;
+        Image {
+            x: 7px;
+            y: (parent.height - 16px) / 2;
+            width: 16px;
+            height: 16px;
+            source: @image-url("icons/minus.svg");
+            colorize: root.value <= root.minimum ? Theme.line : Theme.muted;
+        }
+        m := TouchArea {
+            enabled: root.enabled;
+            clicked => {
+                root.set(root.value - root.step-size);
             }
         }
-        ti := TextInput {
-            horizontal-stretch: 1;
-            enabled: root.enabled;
-            input-type: InputType.number;
-            single-line: true;
-            color: Theme.text;
-            font-size: 13px * Theme.font-scale;
-            font-weight: 600;
-            horizontal-alignment: center;
-            vertical-alignment: center;
-            init => {
-                self.text = root.value;
+    }
+    ti := TextInput {
+        x: 36px;
+        y: 0px;
+        width: parent.width - 72px;
+        height: parent.height;
+        enabled: root.enabled;
+        input-type: InputType.number;
+        single-line: true;
+        color: Theme.text;
+        font-size: 13px * Theme.font-scale;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        init => {
+            self.text = root.value;
+        }
+        edited => {
+            if (self.text != "") {
+                root.value = clamp(self.text.to-float(), root.minimum, root.maximum);
+                root.edited(root.value);
             }
-            edited => {
-                if (self.text != "") {
-                    root.value = clamp(self.text.to-float(), root.minimum, root.maximum);
-                    root.edited(root.value);
-                }
-            }
-            accepted => {
+        }
+        accepted => {
+            root.set(root.value);
+        }
+        changed has-focus => {
+            if (!self.has-focus) {
                 root.set(root.value);
             }
-            changed has-focus => {
-                if (!self.has-focus) {
-                    root.set(root.value);
-                }
-            }
         }
-        Rectangle {
-            width: 30px;
-            background: p.has-hover ? Theme.hover : transparent;
-            border-radius: 9px;
-            Image {
-                x: 7px;
-                y: (parent.height - 16px) / 2;
-                width: 16px;
-                height: 16px;
-                source: @image-url("icons/plus.svg");
-                colorize: root.value >= root.maximum ? Theme.line : Theme.muted;
-            }
-            p := TouchArea {
-                enabled: root.enabled;
-                clicked => {
-                    root.set(root.value + root.step-size);
-                }
+    }
+    Rectangle {
+        x: parent.width - 33px;
+        y: 3px;
+        width: 30px;
+        height: parent.height - 6px;
+        background: p.has-hover ? Theme.hover : transparent;
+        border-radius: 8px;
+        Image {
+            x: 7px;
+            y: (parent.height - 16px) / 2;
+            width: 16px;
+            height: 16px;
+            source: @image-url("icons/plus.svg");
+            colorize: root.value >= root.maximum ? Theme.line : Theme.muted;
+        }
+        p := TouchArea {
+            enabled: root.enabled;
+            clicked => {
+                root.set(root.value + root.step-size);
             }
         }
     }

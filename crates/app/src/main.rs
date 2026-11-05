@@ -533,6 +533,14 @@ fn main() -> anyhow::Result<()> {
             }
         });
         let w = main.as_weak();
+        main.on_win_resized(move || {
+            if let Some(m) = w.upgrade() {
+                let maxed = m.window().is_maximized();
+                m.set_is_max(maxed);
+                winfx::round_shape(m.window(), 20.0, !maxed);
+            }
+        });
+        let w = main.as_weak();
         main.on_win_resize(move |dir| {
             if let Some(m) = w.upgrade() {
                 winfx::resize_edge(m.window(), dir);
@@ -1289,6 +1297,20 @@ fn wire_add(ui: &Ui) {
     let Some(add) = ui.ctx.add.upgrade() else { return };
     {
         let ctx = ui.ctx.clone();
+        {
+            let w = add.as_weak();
+            add.on_drag(move || {
+                if let Some(a) = w.upgrade() {
+                    winfx::drag_window(a.window());
+                }
+            });
+            let w = add.as_weak();
+            add.on_minimize(move || {
+                if let Some(a) = w.upgrade() {
+                    a.window().set_minimized(true);
+                }
+            });
+        }
         add.on_check_url(move || {
             if let Some(d) = ctx.add.upgrade() {
                 let url = d.get_url().trim().to_string();

@@ -83,6 +83,11 @@ fn place_now(w: &slint::Window, maximizable: bool) -> bool {
         apply_icons(w);
         // the thin coloured border is drawn by the window itself (follows the theme)
         round_corners(w, None);
+        // windows without the Windows frame get rounded corners on every Windows
+        let frameless = w.with_winit_window(|win: &winit::window::Window| !win.is_decorated()).unwrap_or(false);
+        if frameless {
+            round_shape(w, 20.0, true);
+        }
     }
     placed
 }
@@ -395,6 +400,29 @@ pub(crate) fn round_corners(w: &slint::Window, border: Option<u32>) {
         }
     }
 }
+
+/// The window's shape cut as a rounded rectangle: works on Windows 10 too
+/// (where DWM does not round windows). `round = false` gives the full
+/// rectangle back (maximized).
+#[cfg(windows)]
+pub(crate) fn round_shape(w: &slint::Window, radius: f32, round: bool) {
+    use windows_sys::Win32::Graphics::Gdi::{CreateRoundRectRgn, SetWindowRgn};
+    let Some(hwnd) = hwnd_of(w) else { return };
+    // SAFETY: plain GDI calls; Windows owns the region after SetWindowRgn.
+    unsafe {
+        if !round {
+            SetWindowRgn(hwnd as _, std::ptr::null_mut(), 1);
+            return;
+        }
+        let s = w.size();
+        let r = (radius * w.scale_factor()) as i32;
+        let rgn = CreateRoundRectRgn(0, 0, s.width as i32 + 1, s.height as i32 + 1, r * 2, r * 2);
+        SetWindowRgn(hwnd as _, rgn, 1);
+    }
+}
+
+#[cfg(not(windows))]
+pub(crate) fn round_shape(_w: &slint::Window, _radius: f32, _round: bool) {}
 
 #[cfg(not(windows))]
 pub(crate) fn round_corners(_w: &slint::Window, _border: Option<u32>) {}
