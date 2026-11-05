@@ -3,7 +3,7 @@
 // rounded download list, one progress window per download. Nine themes.
 
 import { ListView, TabWidget, TextEdit, Palette } from "std-widgets.slint";
-import { Button, LineEdit, SpinBox, ComboBox, Field, Panel } from "kit.slint";
+import { Button, LineEdit, SpinBox, ComboBox, Field, Panel, Switch } from "kit.slint";
 import { Icons, ToolTip, DownloadRow, QueueRow, SegView, Cols, ColDef, CatRow, PairRow, LinkRow, Theme, ThemedWindow, CaptionButton, P, G, TypeIcon, BigTypeIcon, ToolBtn, ToolSeparator, TreeItem, HeaderCell, Cell, MenuEntry, MenuSep, MenuLabel, Glyph, HRow, CheckBox } from "common.slint";
 export { DownloadRow, QueueRow, SegView, Cols, ColDef, CatRow, PairRow, LinkRow, Theme }
 export { BrowserRow } from "dialogs.slint";
@@ -2189,8 +2189,9 @@ export component AddDialog inherits ThemedWindow {
     always-on-top: root.front;
     title: @tr("Download File Info");
     preferred-width: 700px;
-    min-width: 520px;
-    min-height: 440px;
+    preferred-height: 600px;
+    min-width: 540px;
+    min-height: 420px;
 
     in-out property <string> url;
     // full path: folder + file name
@@ -2232,142 +2233,169 @@ export component AddDialog inherits ThemedWindow {
     callback cancel();
 
     VerticalLayout {
-        padding: 18px;
-        spacing: 12px;
-        // ---- title + address
-        HRow {
-            spacing: 12px;
-            Rectangle {
-                width: 40px;
-                height: 40px;
-                border-radius: 12px;
-                background: @linear-gradient(135deg, Theme.accent 0%, Theme.accent2 100%);
-                Image {
-                    x: 9px;
-                    y: 9px;
-                    width: 22px;
-                    height: 22px;
-                    source: @image-url("icons/download.svg");
-                    colorize: #ffffff;
-                }
-            }
-            VerticalLayout {
-                horizontal-stretch: 1;
-                alignment: center;
-                Text {
-                    text: @tr("Download File Info");
-                    font-size: 18px * Theme.font-scale;
-                    font-weight: 800;
-                    color: Theme.text;
-                    horizontal-alignment: Theme.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
-                }
-                Text {
-                    text: root.probing ? @tr("Checking the address…") : root.info != "" ? root.info : @tr("Paste a link and press Check");
-                    font-size: 12px * Theme.font-scale;
-                    color: root.info-error ? Theme.err : Theme.muted;
-                    overflow: elide;
-                    horizontal-alignment: Theme.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
-                }
-            }
-        }
-        Field {
-            label: @tr("URL");
-            HRow {
-                spacing: 8px;
-                LineEdit {
-                    text <=> root.url;
-                    placeholder-text: @tr("https://example.com/file");
-                    horizontal-stretch: 1;
-                    accepted(t) => {
-                        root.check-url();
-                    }
-                }
-                Button {
-                    text: @tr("Check");
-                    clicked => {
-                        root.check-url();
-                    }
-                }
-            }
-        }
-        if root.warning != "": Rectangle {
-            border-radius: 10px;
-            background: Theme.warn.transparentize(0.86);
-            border-width: 1px;
-            border-color: Theme.warn.transparentize(0.6);
-            height: wtxt.preferred-height + 16px;
-            wtxt := Text {
-                x: 12px;
-                y: 8px;
-                width: parent.width - 24px;
-                text: root.warning;
-                color: Theme.warn;
-                wrap: word-wrap;
-                font-size: 12px * Theme.font-scale;
-                horizontal-alignment: Theme.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
-            }
-        }
-        // ---- the file and where it goes
-        Panel {
-            VerticalLayout {
-                padding: 14px;
+        spacing: 0px;
+        Flickable {
+            vertical-stretch: 1;
+            content-height: form.preferred-height;
+            form := VerticalLayout {
+                padding: 16px;
                 spacing: 12px;
+                alignment: start;
+                // ---- URL + check
                 HRow {
-                    spacing: 16px;
-                    VerticalLayout {
+                    spacing: 8px;
+                    Field {
+                        label: @tr("URL");
                         horizontal-stretch: 1;
-                        spacing: 12px;
-                        Field {
-                            label: @tr("Category");
-                            ComboBox {
-                                model: root.category-names;
-                                current-index <=> root.category-index;
-                                selected(v) => {
-                                    root.category-changed(root.category-index);
-                                }
-                            }
-                        }
-                        Field {
-                            label: @tr("Save As");
-                            HRow {
-                                spacing: 8px;
-                                LineEdit {
-                                    text <=> root.save-as;
-                                    horizontal-stretch: 1;
-                                }
-                                Button {
-                                    text: "…";
-                                    min-width: 44px;
-                                    clicked => {
-                                        root.browse();
-                                    }
-                                }
+                        LineEdit {
+                            icon: @image-url("icons/link.svg");
+                            text <=> root.url;
+                            placeholder-text: @tr("https://example.com/file");
+                            accepted(t) => {
+                                root.check-url();
                             }
                         }
                     }
-                    if root.win-w > 600px: VerticalLayout {
-                        width: 118px;
-                        spacing: 4px;
-                        alignment: center;
+                    VerticalLayout {
+                        alignment: end;
+                        Button {
+                            text: root.probing ? "…" : @tr("Check");
+                            enabled: !root.probing;
+                            clicked => {
+                                root.check-url();
+                            }
+                        }
+                    }
+                }
+                // ---- status line
+                HRow {
+                    spacing: 7px;
+                    height: 16px;
+                    Rectangle {
+                        width: 6px;
+                        Rectangle {
+                            y: 5px;
+                            width: 6px;
+                            height: 6px;
+                            border-radius: 3px;
+                            background: root.probing ? Theme.accent : root.info-error ? Theme.err : root.info != "" ? Theme.ok : Theme.muted;
+                            opacity: root.probing ? 0.5 + 0.5 * Math.sin(animation-tick() / 1s * 6rad) : 1.0;
+                        }
+                    }
+                    Text {
+                        horizontal-stretch: 1;
+                        text: root.probing ? @tr("Checking the address…") : root.info != "" ? root.info : @tr("Paste a link and press Check");
+                        color: root.probing ? Theme.accent : root.info-error ? Theme.err : root.info != "" ? Theme.ok : Theme.muted;
+                        font-size: 12px * Theme.font-scale;
+                        overflow: elide;
+                        vertical-alignment: center;
+                        horizontal-alignment: Theme.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+                    }
+                }
+                // ---- warning
+                if root.warning != "": Rectangle {
+                    border-radius: 11px;
+                    background: Theme.warn.transparentize(0.88);
+                    border-width: 1px;
+                    border-color: Theme.warn.transparentize(0.7);
+                    height: wtxt.preferred-height + 20px;
+                    Image {
+                        x: Theme.rtl ? parent.width - 30px : 11px;
+                        y: 11px;
+                        width: 16px;
+                        height: 16px;
+                        source: @image-url("icons/alert.svg");
+                        colorize: Theme.warn;
+                    }
+                    wtxt := Text {
+                        x: Theme.rtl ? 12px : 36px;
+                        y: 10px;
+                        width: parent.width - 48px;
+                        text: root.warning;
+                        color: Theme.warn;
+                        wrap: word-wrap;
+                        font-size: 12px * Theme.font-scale;
+                        horizontal-alignment: Theme.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+                    }
+                }
+                // ---- the file
+                if root.size-text != "" || root.ext != "": Rectangle {
+                    height: 64px;
+                    border-radius: 16px;
+                    background: Theme.input-bg;
+                    border-width: 1px;
+                    border-color: Theme.line;
+                    HRow {
+                        padding: 10px;
+                        spacing: 12px;
                         Image {
-                            height: 84px;
-                            source: Icons.card(root.kind);
+                            width: 44px;
+                            source: Icons.type(root.kind);
                             image-fit: contain;
                         }
-                        Text {
-                            text: root.ext != "" ? root.ext : "";
-                            horizontal-alignment: center;
-                            font-size: 11px * Theme.font-scale;
-                            font-weight: 800;
-                            color: Theme.accent;
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            Text {
+                                text: root.ext != "" ? root.ext + " " + @tr("file") : @tr("File");
+                                font-size: 13px * Theme.font-scale;
+                                font-weight: 700;
+                                color: Theme.text;
+                                overflow: elide;
+                                horizontal-alignment: Theme.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+                            }
+                            Text {
+                                text: root.size-text;
+                                font-size: 11px * Theme.font-scale;
+                                color: Theme.muted;
+                                overflow: elide;
+                                horizontal-alignment: Theme.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+                            }
                         }
-                        Text {
-                            text: root.size-text;
-                            horizontal-alignment: center;
-                            font-size: 12px * Theme.font-scale;
-                            font-weight: 600;
-                            color: Theme.text;
-                            wrap: word-wrap;
+                    }
+                }
+                // ---- category + connections
+                HRow {
+                    spacing: 12px;
+                    Field {
+                        label: @tr("Category");
+                        horizontal-stretch: 1;
+                        ComboBox {
+                            model: root.category-names;
+                            current-index <=> root.category-index;
+                            selected(v) => {
+                                root.category-changed(root.category-index);
+                            }
+                        }
+                    }
+                    Field {
+                        label: @tr("Connections") + " (1–32)";
+                        horizontal-stretch: 1;
+                        SpinBox {
+                            minimum: 1;
+                            maximum: 32;
+                            value <=> root.connections;
+                        }
+                    }
+                }
+                // ---- save as
+                HRow {
+                    spacing: 8px;
+                    Field {
+                        label: @tr("Save As");
+                        horizontal-stretch: 1;
+                        LineEdit {
+                            text <=> root.save-as;
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: end;
+                        Button {
+                            text: @tr("Browse");
+                            icon: @image-url("icons/folder.svg");
+                            clicked => {
+                                root.browse();
+                            }
                         }
                     }
                 }
@@ -2382,97 +2410,106 @@ export component AddDialog inherits ThemedWindow {
                         placeholder-text: @tr("optional note");
                     }
                 }
-            }
-        }
-        // ---- speed + queue
-        Panel {
-            HRow {
-                padding: 14px;
-                spacing: 16px;
-                Field {
-                    label: @tr("Connections");
-                    width: 130px;
-                    SpinBox {
-                        minimum: 1;
-                        maximum: 32;
-                        value <=> root.connections;
-                    }
-                }
-                Field {
-                    label: @tr("Queue");
-                    horizontal-stretch: 1;
-                    ComboBox {
-                        model: root.queue-names;
-                        current-index <=> root.queue-index;
-                    }
-                }
-            }
-        }
-        // ---- login (only when needed)
-        Panel {
-            VerticalLayout {
-                padding: 12px;
-                padding-left: 14px;
-                padding-right: 14px;
-                spacing: 10px;
-                CheckBox {
-                    text: @tr("Use authorization");
-                    checked <=> root.use-login;
-                }
-                if root.use-login: HRow {
+                // ---- queue + authorization
+                HRow {
                     spacing: 12px;
                     Field {
-                        label: @tr("Login");
+                        label: @tr("Queue");
                         horizontal-stretch: 1;
-                        LineEdit {
-                            text <=> root.user;
+                        ComboBox {
+                            model: root.queue-names;
+                            current-index <=> root.queue-index;
                         }
                     }
                     Field {
-                        label: @tr("Password");
+                        label: @tr("Use authorization");
                         horizontal-stretch: 1;
-                        LineEdit {
-                            text <=> root.password;
-                            input-type: InputType.password;
+                        HRow {
+                            height: 36px;
+                            alignment: start;
+                            VerticalLayout {
+                                alignment: center;
+                                Switch {
+                                    on <=> root.use-login;
+                                }
+                            }
+                        }
+                    }
+                }
+                if root.use-login: Rectangle {
+                    border-radius: 11px;
+                    background: Theme.input-bg.transparentize(0.4);
+                    border-width: 1px;
+                    border-color: Theme.line;
+                    height: 92px;
+                    HRow {
+                        padding: 12px;
+                        spacing: 12px;
+                        Field {
+                            label: @tr("Login");
+                            horizontal-stretch: 1;
+                            LineEdit {
+                                icon: @image-url("icons/user.svg");
+                                text <=> root.user;
+                            }
+                        }
+                        Field {
+                            label: @tr("Password");
+                            horizontal-stretch: 1;
+                            LineEdit {
+                                icon: @image-url("icons/key.svg");
+                                text <=> root.password;
+                                input-type: InputType.password;
+                            }
                         }
                     }
                 }
             }
         }
+        // ---- footer
         Rectangle {
-            vertical-stretch: 1;
-        }
-        // ---- the buttons
-        HRow {
-            spacing: 8px;
-            if root.can-use-browser: Button {
-                text: @tr("Download with the browser");
-                clicked => {
-                    root.use-browser();
-                }
-            }
+            height: 58px;
+            background: Theme.panel.transparentize(0.4);
             Rectangle {
-                horizontal-stretch: 1;
+                height: 1px;
+                background: Theme.line;
             }
-            Button {
-                text: @tr("Cancel");
-                clicked => {
-                    root.cancel();
+            HRow {
+                padding: 11px;
+                padding-left: 16px;
+                padding-right: 16px;
+                spacing: 8px;
+                Button {
+                    text: @tr("Cancel");
+                    ghost: true;
+                    clicked => {
+                        root.cancel();
+                    }
                 }
-            }
-            Button {
-                text: @tr("Download Later");
-                enabled: root.url != "";
-                clicked => {
-                    root.later();
+                Rectangle {
+                    horizontal-stretch: 1;
                 }
-            }
-            Button {
-                text: @tr("Start Download");
-                primary: true;
-                enabled: root.url != "";
-                clicked => {
-                    root.start-now();
+                Button {
+                    text: @tr("Download Later");
+                    enabled: root.url != "";
+                    clicked => {
+                        root.later();
+                    }
+                }
+                if root.can-use-browser: Button {
+                    text: @tr("Download with the browser");
+                    clicked => {
+                        root.use-browser();
+                    }
+                }
+                Button {
+                    text: @tr("Start Download");
+                    icon: @image-url("icons/download.svg");
+                    primary: true;
+                    enabled: root.url != "";
+                    clicked => {
+                        root.start-now();
+                    }
                 }
             }
         }
