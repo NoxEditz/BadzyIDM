@@ -532,16 +532,17 @@ component NavItem inherits Rectangle {
 component Chip inherits Rectangle {
     in property <string> kind;
     in property <string> text;
+    in property <string> count;
     in property <bool> selected;
     in property <bool> all;
     callback clicked();
-    width: 88px;
-    height: 70px;
-    border-radius: 14px;
+    width: max(112px, nm.preferred-width + 74px);
+    height: 58px;
+    border-radius: 16px;
     background: root.selected ? Theme.select : ta.has-hover ? Theme.hover : Theme.panel.transparentize(0.2);
     border-width: root.selected ? 1.5px : 1px;
     border-color: root.selected ? Theme.accent : Theme.line;
-    transform-scale: ta.pressed ? 0.95 : ta.has-hover ? 1.04 : 1.0;
+    transform-scale: ta.pressed ? 0.96 : ta.has-hover ? 1.03 : 1.0;
     animate background { duration: 160ms; easing: ease-out; }
     animate border-color { duration: 160ms; easing: ease-out; }
     animate transform-scale { duration: 130ms; easing: ease-out; }
@@ -550,35 +551,44 @@ component Chip inherits Rectangle {
             root.clicked();
         }
     }
-    VerticalLayout {
-        alignment: center;
-        spacing: 6px;
-        padding-left: 4px;
-        padding-right: 4px;
+    HRow {
+        padding: 10px;
+        spacing: 10px;
         Rectangle {
-            height: 26px;
+            width: 36px;
             if root.all: Image {
                 source: @image-url("icons/apps.svg");
                 colorize: root.selected ? Theme.accent : Theme.muted;
-                x: (parent.width - 24px) / 2;
-                y: 1px;
+                x: 6px;
+                y: 11px;
                 width: 24px;
                 height: 24px;
             }
-            if !root.all: TypeIcon {
-                kind: root.kind;
-                x: (parent.width - 26px) / 2;
-                width: 26px;
-                height: 26px;
+            if !root.all: Image {
+                source: Icons.type(root.kind);
+                image-fit: contain;
+                y: 5px;
+                width: 36px;
+                height: 36px;
             }
         }
-        Text {
-            text: root.text;
-            horizontal-alignment: center;
-            overflow: elide;
-            font-size: 11px * Theme.font-scale;
-            font-weight: root.selected ? 700 : 500;
-            color: root.selected ? Theme.text : Theme.muted;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            nm := Text {
+                text: root.text;
+                font-size: 14px * Theme.font-scale;
+                font-weight: root.selected ? 800 : 700;
+                color: Theme.text;
+                overflow: elide;
+                horizontal-alignment: Theme.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+            }
+            Text {
+                text: root.count;
+                font-size: 11px * Theme.font-scale;
+                color: Theme.muted;
+                horizontal-alignment: Theme.rtl ? TextHorizontalAlignment.right : TextHorizontalAlignment.left;
+            }
         }
     }
 }
@@ -1300,7 +1310,7 @@ export component MainWindow inherits ThemedWindow {
                     spacing: 10px;
                     // ---- category tiles
                     Flickable {
-                        height: 74px;
+                        height: 62px;
                         content-width: chips.preferred-width;
                         chips := HorizontalLayout {
                             spacing: 8px;
@@ -1308,6 +1318,7 @@ export component MainWindow inherits ThemedWindow {
                             Chip {
                                 all: true;
                                 text: @tr("All");
+                                count: root.count-all;
                                 selected: root.view == "all";
                                 clicked => {
                                     root.view = "all";
@@ -1317,6 +1328,7 @@ export component MainWindow inherits ThemedWindow {
                             for c in root.categories: Chip {
                                 kind: c.kind;
                                 text: c.label;
+                                count: c.count;
                                 selected: root.view == "cat:" + c.name;
                                 clicked => {
                                     root.view = "cat:" + c.name;
