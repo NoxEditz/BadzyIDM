@@ -95,6 +95,22 @@ pub fn command(mgr: &Arc<Manager>, cmd: &str, arg: &Value) {
     match cmd {
         "resume" => ids().into_iter().for_each(|i| mgr.start(i)),
         "pause" => ids().into_iter().for_each(|i| mgr.pause(i)),
+        "settings" => {
+            // merge the changed fields into the current settings and save
+            if let (Ok(mut cur), Some(patch)) = (serde_json::to_value(mgr.settings()), arg.as_object()) {
+                if let Some(o) = cur.as_object_mut() {
+                    for (k, v) in patch {
+                        o.insert(k.clone(), v.clone());
+                    }
+                }
+                if let Ok(s) = serde_json::from_value::<swiftget_engine::Settings>(cur) {
+                    let _ = mgr.set_settings(s);
+                }
+            }
+        }
+        "autostart" => {
+            crate::autostart::set(arg["on"].as_bool().unwrap_or(false));
+        }
         "resumeAll" => mgr.start_all(),
         "startQueue" => mgr.start_queue(swiftget_engine::config::MAIN_QUEUE),
         "stopQueue" => mgr.stop_queue(swiftget_engine::config::MAIN_QUEUE),
@@ -242,4 +258,14 @@ fn kind_of_name(name: &str) -> &'static str {
         "torrent" => "torrent",
         _ => "general",
     }
+}
+
+/// The settings the UI shows (a JSON object with the engine's own field names).
+pub fn settings_js(mgr: &Manager) -> String {
+    let mut v = serde_json::to_value(mgr.settings()).unwrap_or_default();
+    if let Some(o) = v.as_object_mut() {
+        o.insert("autostart".into(), json!(crate::autostart::is_enabled()));
+        o.insert("version".into(), json!(env!("CARGO_PKG_VERSION")));
+    }
+    format!("window.__badzy&&window.__badzy.settings&&window.__badzy.settings({v})")
 }

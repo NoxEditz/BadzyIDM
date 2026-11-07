@@ -458,3 +458,11 @@ export function FolderPicker(props: { initial?: string; mode?: "folder" | "file"
   if (nat.native && props.mode !== "file") return <NativeFolderPicker initial={props.initial} onPick={props.onPick} />;
   return <FakeFolderPicker {...props} />;
 }
+
+/** Opens the Windows folder dialog (or the designed picker in the prototype). */
+export function useFolderPick() {
+  const { open } = useApp();
+  return {
+    pickFolder: (initial: string, onPick: (p: string) => void) => open(<FolderPicker initial={initial} onPick={onPick} />),
+  };
+}

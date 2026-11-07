@@ -42,6 +42,7 @@ import {
 import { cn } from "@/lib/utils";
 import { WindowFrame, Wordmark } from "../WindowFrame";
 import { useNative } from "../context";
+import { useSettings } from "../settingsStore";
 import { MarbleArt } from "../MarbleArt";
 import { FileTypeTile } from "../icons";
 import { categories, queues, downloads as seedRows, type DownloadRow } from "../data";
@@ -206,7 +207,10 @@ export default function MainWindow() {
   const [selected, setSelected] = useState<number>(1);
   const [drawer, setDrawer] = useState(false);
   const [bell, setBell] = useState(false);
-  const [limiter, setLimiter] = useState(true);
+  const st = useSettings();
+  const [limiterLocal, setLimiter] = useState(true);
+  const limiter = st.native ? !!st.s?.speed_limit_on : limiterLocal;
+  const limitText = st.native ? ((st.s?.speed_limit_kb ?? 0) > 0 ? `Limiter ${((st.s?.speed_limit_kb ?? 0) / 1024).toFixed(1)} MB/s` : "Unlimited") : "Limiter 4 MB/s";
   const [search, setSearch] = useState("");
   const [navIdx, setNavIdx] = useState(0);
   const [cat, setCat] = useState("all");
@@ -233,7 +237,7 @@ export default function MainWindow() {
     scheduler: () => open(<SchedulerDialog />),
     extension: () => open(<ExtensionInstallDialog />),
     settings: () => open(<Settings />),
-    limiter: () => open(<SpeedLimiterDialog />),
+    limiter: () => open(st.native ? <Settings initialTab="Connection" /> : <SpeedLimiterDialog />),
     queues: () => open(<QueueEditorDialog />),
     columns: () => open(<ColumnsDialog />),
     find: () => open(<FindDialog />),
@@ -646,7 +650,7 @@ export default function MainWindow() {
               <Chip active={limiter} onClick={a.limiter} onContextMenu={(e) => { e.preventDefault(); setLimiter((l) => !l); }}>
                 <Gauge className="h-3 w-3" /> Limiter {limiter ? "on" : "off"}
               </Chip>
-              <Switch on={limiter} onToggle={(v) => { setLimiter(v); toast({ title: v ? "Speed limiter on" : "Speed limiter off", message: v ? "4 MB/s" : "Full speed", tone: "accent", icon: <Gauge className="h-4 w-4" /> }); }} label="Limiter" />
+              <Switch on={limiter} onToggle={(v) => { if (st.native) st.set({ speed_limit_on: v }); else setLimiter(v); toast({ title: v ? "Speed limiter on" : "Speed limiter off", message: v ? limitText.replace("Limiter ", "") : "Full speed", tone: "accent", icon: <Gauge className="h-4 w-4" /> }); }} label="Limiter" />
               <span className="mx-1 h-5 w-px bg-edge" />
               <Button variant="secondary" size="sm" onClick={a.startQueue}><Play className="h-3.5 w-3.5" /> Start Queue</Button>
               <Button variant="secondary" size="sm" onClick={a.stopQueue}><Square className="h-3.5 w-3.5" /> Stop Queue</Button>
@@ -749,7 +753,7 @@ export default function MainWindow() {
                 <HardDrive className="h-3 w-3" /> D:\\ 412 GB free
               </button>
               <button onClick={a.limiter} className="flex items-center gap-1.5 transition-colors hover:text-accent">
-                <Gauge className="h-3 w-3" /> {limiter ? "Limiter 4 MB/s" : "Unlimited"}
+                <Gauge className="h-3 w-3" /> {limiter ? limitText : "Unlimited"}
               </button>
             </div>
           </div>

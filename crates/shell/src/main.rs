@@ -15,6 +15,8 @@ fn main() {
 #[cfg_attr(not(windows), allow(dead_code))]
 mod api;
 #[cfg_attr(not(windows), allow(dead_code))]
+mod autostart;
+#[cfg_attr(not(windows), allow(dead_code))]
 mod bridge;
 
 #[cfg(windows)]
@@ -130,7 +132,7 @@ mod win {
                     "maximize" => Msg::ToggleMaximize,
                     "close" => Msg::Close,
                     "ready" => Msg::Ready,
-                    c @ ("resume" | "pause" | "resumeAll" | "pauseAll" | "remove" | "add" | "probe" | "pickFolder" | "startQueue" | "stopQueue" | "removeFinished" | "redownload" | "openFile" | "openFolder" | "move") => {
+                    c @ ("resume" | "pause" | "resumeAll" | "pauseAll" | "remove" | "add" | "probe" | "pickFolder" | "startQueue" | "stopQueue" | "removeFinished" | "redownload" | "openFile" | "openFolder" | "move" | "settings" | "autostart" | "getSettings") => {
                         Msg::Cmd(c.to_string(), v["arg"].clone())
                     }
                     "resize" => Msg::Resize(match v["arg"].as_str().unwrap_or("") {
@@ -227,7 +229,12 @@ mod win {
                             }
                         });
                     }
-                    Msg::Cmd(c, a) => bridge::command(&mgr, &c, &a),
+                    Msg::Cmd(c, a) => {
+                        bridge::command(&mgr, &c, &a);
+                        if matches!(c.as_str(), "settings" | "autostart" | "getSettings") {
+                            let _ = webview.evaluate_script(&bridge::settings_js(&mgr));
+                        }
+                    }
                     Msg::Js(js) => {
                         let _ = webview.evaluate_script(&js);
                     }
