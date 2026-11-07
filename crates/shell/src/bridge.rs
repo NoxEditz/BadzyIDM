@@ -105,6 +105,15 @@ pub fn command(mgr: &Arc<Manager>, cmd: &str, arg: &Value) {
                     file_name: arg["name"].as_str().filter(|n| !n.is_empty()).map(str::to_string),
                     save_dir: arg["dir"].as_str().filter(|d| !d.is_empty()).map(Into::into),
                     start: arg["start"].as_bool().unwrap_or(true),
+                    connections: arg["connections"].as_u64().map(|c| c.clamp(1, 32) as u32),
+                    description: arg["desc"].as_str().filter(|d| !d.is_empty()).map(str::to_string),
+                    headers: swiftget_engine::RequestHeaders {
+                        auth: match (arg["login"].as_str(), arg["password"].as_str()) {
+                            (Some(l), Some(p)) if !l.is_empty() => Some((l.to_string(), p.to_string())),
+                            _ => None,
+                        },
+                        ..Default::default()
+                    },
                     ..Default::default()
                 });
             }
@@ -159,5 +168,46 @@ pub fn from_browser(mgr: &Arc<Manager>, ev: crate::api::ApiEvent) {
             mgr.add(NewDownload { url, start: true, ..Default::default() });
         }
         crate::api::ApiEvent::Links(_) | crate::api::ApiEvent::Show => {}
+    }
+}
+
+/// "Check" in the Add window: ask the server what the file is. The answer goes back as JS.
+pub async fn probe_js(mgr: Arc<Manager>, url: String) -> String {
+    let headers = swiftget_engine::RequestHeaders::default();
+    let v = match mgr.probe(url.trim(), &headers).await {
+        Ok(p) => {
+            let name = p.file_name.clone();
+            let category = mgr.settings().category_of(&name, &url);
+            json!({
+                "ok": true,
+                "name": name,
+                "size": p.total_size.map(human_size).unwrap_or_else(|| "unknown size".into()),
+                "resumable": p.resumable,
+                "webPage": p.is_web_page(),
+                "category": category,
+                "dir": mgr.settings().dir_for(&category).display().to_string(),
+                "kind": kind_of_name(&name),
+            })
+        }
+        Err(e) => json!({ "ok": false, "error": crate::err_text(&format!("{e:#}")) }),
+    };
+    format!("window.__badzy&&window.__badzy.probe&&window.__badzy.probe({v})")
+}
+
+fn kind_of_name(name: &str) -> &'static str {
+    let ext = name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+    match ext.as_str() {
+        "mp4" | "mkv" | "avi" | "mov" | "webm" | "m3u8" | "flv" | "wmv" | "ts" => "video",
+        "mp3" | "flac" | "wav" | "aac" | "ogg" | "m4a" | "opus" => "audio",
+        "zip" | "rar" | "7z" | "tar" | "gz" | "bz2" | "xz" => "archive",
+        "exe" | "msi" | "apk" | "dmg" | "msix" => "program",
+        "jpg" | "jpeg" | "png" | "gif" | "webp" | "bmp" | "svg" | "avif" => "image",
+        "pdf" => "pdf",
+        "doc" | "docx" | "txt" | "rtf" | "odt" => "doc",
+        "xls" | "xlsx" | "csv" | "ods" => "sheet",
+        "ppt" | "pptx" | "odp" => "slides",
+        "iso" | "img" => "disc",
+        "torrent" => "torrent",
+        _ => "general",
     }
 }

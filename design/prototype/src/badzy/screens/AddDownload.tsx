@@ -1,5 +1,6 @@
 import { useNative } from "../context";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { ArrowDownToLine, FolderSearch, Link2, Lock, TriangleAlert, User } from "lucide-react";
 import { WindowFrame } from "../WindowFrame";
@@ -60,12 +61,15 @@ export function AddDownloadWindow({ lang = "en", initialUrl }: { lang?: "en" | "
   const { open } = useApp();
   const nat = useNative();
   const [url, setUrl] = useState(initialUrl ?? (nat.native ? "" : "https://cdn.example.com/interstellar-1080p.mkv"));
-  const [checked, setChecked] = useState(true);
+  const N = nat.native;
+  const [checked, setChecked] = useState(!N);
   const [checking, setChecking] = useState(false);
+  const [info, setInfo] = useState<{ name: string; size: string; resumable: boolean; kind: FileKind } | null>(null);
+  const [probeErr, setProbeErr] = useState("");
   const [category, setCategory] = useState("Video");
-  const [saveAs, setSaveAs] = useState("D:\\Movies\\Interstellar.2014.1080p.mkv");
+  const [saveAs, setSaveAs] = useState(N ? "" : "D:\\Movies\\Interstellar.2014.1080p.mkv");
   const [remember, setRemember] = useState(true);
-  const [desc, setDesc] = useState("Sci-fi classic, 1080p BluRay remux.");
+  const [desc, setDesc] = useState(N ? "" : "Sci-fi classic, 1080p BluRay remux.");
   const [conn, setConn] = useState(8);
   const [queue, setQueue] = useState("Main queue");
   const [auth, setAuth] = useState(false);
@@ -73,7 +77,38 @@ export function AddDownloadWindow({ lang = "en", initialUrl }: { lang?: "en" | "
   const [password, setPassword] = useState("");
   const t = strings[lang];
   const tt = toasts[lang];
-  const fileName = saveAs.split("\\").pop() ?? saveAs;
+  const sep = saveAs.includes("/") && !saveAs.includes("\\") ? "/" : "\\";
+  const doCheck = () => {
+    if (!url.trim()) return;
+    setProbeErr("");
+    setChecked(false);
+    setChecking(true);
+    nat.send("probe", { url });
+  };
+  useEffect(() => {
+    if (!N) return;
+    const b = ((window as unknown as { __badzy?: Record<string, unknown> }).__badzy ??= {});
+    b["probe"] = (r: { ok: boolean; name?: string; size?: string; resumable?: boolean; kind?: FileKind; category?: string; dir?: string; error?: string }) => {
+      setChecking(false);
+      if (r.ok && r.name) {
+        setChecked(true);
+        setInfo({ name: r.name, size: r.size ?? "", resumable: !!r.resumable, kind: r.kind ?? "general" });
+        const cat = ({ video: "Video", audio: "Music", archive: "Compressed", program: "Programs", doc: "Documents", pdf: "Documents", sheet: "Documents", slides: "Documents", image: "Images" } as Record<string, string>)[r.kind ?? ""];
+        if (cat) setCategory(cat);
+        setSaveAs(`${r.dir ?? ""}${r.dir?.includes("/") ? "/" : "\\"}${r.name}`);
+      } else {
+        setChecked(false);
+        setInfo(null);
+        setProbeErr(r.error ?? "The server did not answer.");
+      }
+    };
+    b["folder"] = (p: string) => setSaveAs((cur) => `${p}${p.includes("/") ? "/" : "\\"}${cur.split(/[\\/]/).pop() || ""}`);
+    return () => {
+      delete b["probe"];
+      delete b["folder"];
+    };
+  }, [N]);
+  const fileName = info?.name ?? (saveAs.split(/[\\/]/).pop() || saveAs);
 
   return (
     <div dir={t.dir}>
@@ -93,6 +128,7 @@ export function AddDownloadWindow({ lang = "en", initialUrl }: { lang?: "en" | "
               variant="secondary"
               disabled={checking}
               onClick={() => {
+                if (N) return doCheck();
                 setChecked(false);
                 setChecking(true);
                 setTimeout(() => {
@@ -111,11 +147,11 @@ export function AddDownloadWindow({ lang = "en", initialUrl }: { lang?: "en" | "
               </span>
             ) : checked ? (
               <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-1.5 text-success">
-                <span className="h-1.5 w-1.5 rounded-full bg-success" /> {t.statusOk}
+                <span className="h-1.5 w-1.5 rounded-full bg-success" /> {N && info ? `OK — ${info.name}` : t.statusOk}
               </motion.span>
             ) : (
               <span className="flex items-center gap-1.5 text-muted">
-                <span className="h-1.5 w-1.5 rounded-full bg-muted/50" /> {t.statusHint}
+                <span className={cn("h-1.5 w-1.5 rounded-full", probeErr ? "bg-error" : "bg-muted/50")} /> {probeErr || t.statusHint}
               </span>
             )}
           </div>
@@ -126,10 +162,10 @@ export function AddDownloadWindow({ lang = "en", initialUrl }: { lang?: "en" | "
           </div>
           {/* file card */}
           <div className="flex items-center gap-3 rounded-card border border-edge bg-raised p-2.5">
-            <FileTypeTile kind={"video" as FileKind} size={44} iconSize={20} />
+            <FileTypeTile kind={(info?.kind ?? (N ? "general" : "video")) as FileKind} size={44} iconSize={20} />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-13 font-semibold text-ink">Interstellar.2014.1080p.BluRay.x264.mkv</div>
-              <div className="text-11 text-muted">{t.fileCard}</div>
+              <div className="truncate text-13 font-semibold text-ink">{N ? (info?.name ?? "—") : "Interstellar.2014.1080p.BluRay.x264.mkv"}</div>
+              <div className="text-11 text-muted">{N ? (info ? `${info.size} · ${info.resumable ? "resumable" : "single connection"}` : "Press Check to read the file details") : t.fileCard}</div>
             </div>
           </div>
           {/* grid */}
@@ -142,10 +178,12 @@ export function AddDownloadWindow({ lang = "en", initialUrl }: { lang?: "en" | "
             <Button
               variant="secondary"
               onClick={() =>
-                open(
+                N
+                  ? nat.send("pickFolder", { initial: saveAs.slice(0, saveAs.lastIndexOf(sep)) })
+                  : open(
                   <FolderPicker
-                    initial={saveAs.slice(0, saveAs.lastIndexOf("\\")) || "D:\\Movies"}
-                    onPick={(p) => setSaveAs(`${p}\\${fileName}`)}
+                    initial={saveAs.slice(0, saveAs.lastIndexOf(sep)) || "D:\\Movies"}
+                    onPick={(p) => setSaveAs(`${p}${sep}${fileName}`)}
                   />,
                 )
               }
@@ -176,13 +214,24 @@ export function AddDownloadWindow({ lang = "en", initialUrl }: { lang?: "en" | "
         <div className="flex shrink-0 items-center gap-2 border-t border-edge bg-panel/60 px-4 py-3">
           <Button variant="ghost" onClick={() => close()}>{t.cancel}</Button>
           <div className="ms-auto flex items-center gap-2">
-            <Button variant="secondary" onClick={() => close({ title: tt.later, message: `${fileName} · ${queue}`, tone: "muted" })}>{t.later}</Button>
+            <Button variant="secondary" onClick={() => {
+              if (N) {
+                const dir = saveAs.includes(sep) ? saveAs.slice(0, saveAs.lastIndexOf(sep)) : "";
+                nat.send("add", { url, name: info?.name, dir, connections: conn, desc, start: false });
+                close();
+                return;
+              }
+              close({ title: tt.later, message: `${fileName} · ${queue}`, tone: "muted" });
+            }}>{t.later}</Button>
             <Button variant="secondary" onClick={() => close({ title: tt.browser, message: fileName, tone: "muted" })}>{t.browser}</Button>
             <Button
               variant="primary"
               onClick={() => {
                 close();
-                if (nat.native) nat.send("add", { url, start: true });
+                if (nat.native) {
+                  const dir = saveAs.includes(sep) ? saveAs.slice(0, saveAs.lastIndexOf(sep)) : "";
+                  nat.send("add", { url, name: info?.name, dir, connections: conn, desc, start: true, ...(auth ? { login, password } : {}) });
+                }
                 else open(<ProgressWindow name={fileName} />);
               }}
             >

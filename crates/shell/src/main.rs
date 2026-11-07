@@ -23,6 +23,7 @@ mod win {
     use swiftget_engine::manager::{default_data_dir, Manager};
     use include_dir::{include_dir, Dir};
     use std::borrow::Cow;
+    use tao::platform::windows::WindowExtWindows;
     use tao::{
         dpi::LogicalSize,
         event::{Event, WindowEvent},
@@ -43,6 +44,7 @@ mod win {
         Rows(String),
         Cmd(String, serde_json::Value),
         Api(crate::api::ApiEvent),
+        Js(String),
     }
 
     fn serve(path: &str) -> Response<Cow<'static, [u8]>> {
@@ -57,7 +59,19 @@ mod win {
         }
     }
 
+    fn log(line: &str) {
+        if let Some(dir) = std::env::var_os("LOCALAPPDATA") {
+            let dir = std::path::PathBuf::from(dir).join("Badzy");
+            let _ = std::fs::create_dir_all(&dir);
+            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("shell.log")) {
+                use std::io::Write;
+                let _ = writeln!(f, "{} {line}", chrono::Local::now().format("%F %T"));
+            }
+        }
+    }
+
     pub fn run() {
+        std::panic::set_hook(Box::new(|info| log(&format!("PANIC: {info}"))));
         // One copy only: the browser extension's port tells us whether Badzy already runs.
         let data_dir = default_data_dir();
         let port = swiftget_engine::Settings::load(&data_dir.join("settings.json")).browser_port;
@@ -87,6 +101,9 @@ mod win {
         let window = WindowBuilder::new()
             .with_title("Badzy")
             .with_decorations(false)
+            .with_minimizable(true)
+            .with_maximizable(true)
+            .with_resizable(true)
             .with_transparent(true)
             .with_inner_size(LogicalSize::new(1120.0, 700.0))
             .with_min_inner_size(LogicalSize::new(760.0, 520.0))
@@ -100,14 +117,20 @@ mod win {
             .with_transparent(true)
             .with_custom_protocol("badzy".into(), |_id, req| serve(req.uri().path()))
             .with_ipc_handler(move |req| {
-                let v: serde_json::Value = serde_json::from_str(req.body()).unwrap_or_default();
+                let v: serde_json::Value = match serde_json::from_str(req.body()) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        log(&format!("bad ipc message: {e}"));
+                        return;
+                    }
+                };
                 let msg = match v["cmd"].as_str().unwrap_or("") {
                     "drag" => Msg::Drag,
                     "minimize" => Msg::Minimize,
                     "maximize" => Msg::ToggleMaximize,
                     "close" => Msg::Close,
                     "ready" => Msg::Ready,
-                    c @ ("resume" | "pause" | "resumeAll" | "pauseAll" | "remove" | "add") => {
+                    c @ ("resume" | "pause" | "resumeAll" | "pauseAll" | "remove" | "add" | "probe" | "pickFolder") => {
                         Msg::Cmd(c.to_string(), v["arg"].clone())
                     }
                     "resize" => Msg::Resize(match v["arg"].as_str().unwrap_or("") {
@@ -157,8 +180,8 @@ mod win {
             ));
         };
 
+        let reply = event_loop.create_proxy();
         event_loop.run(move |event, _, flow| {
-            let _keep = &rt;
             *flow = ControlFlow::Wait;
             match event {
                 Event::UserEvent(m) => match m {
@@ -168,7 +191,13 @@ mod win {
                     Msg::Resize(d) => {
                         let _ = window.drag_resize_window(d);
                     }
-                    Msg::Minimize => window.set_minimized(true),
+                    Msg::Minimize => unsafe {
+                        // straight to Windows: the most reliable way for a frameless window
+                        windows_sys::Win32::UI::WindowsAndMessaging::ShowWindow(
+                            window.hwnd() as _,
+                            windows_sys::Win32::UI::WindowsAndMessaging::SW_MINIMIZE,
+                        );
+                    },
                     Msg::ToggleMaximize => window.set_maximized(!window.is_maximized()),
                     Msg::Close => {
                         mgr.shutdown();
@@ -178,7 +207,30 @@ mod win {
                     Msg::Rows(j) => {
                         let _ = webview.evaluate_script(&format!("window.__badzy&&window.__badzy.rows&&window.__badzy.rows({j})"));
                     }
+                    Msg::Cmd(c, a) if c == "probe" => {
+                        let (m, p, url) = (mgr.clone(), reply.clone(), a["url"].as_str().unwrap_or("").to_string());
+                        rt.spawn(async move {
+                            let js = bridge::probe_js(m, url).await;
+                            let _ = p.send_event(Msg::Js(js));
+                        });
+                    }
+                    Msg::Cmd(c, a) if c == "pickFolder" => {
+                        let (p, start) = (reply.clone(), a["initial"].as_str().unwrap_or("").to_string());
+                        std::thread::spawn(move || {
+                            let mut d = rfd::FileDialog::new();
+                            if !start.is_empty() {
+                                d = d.set_directory(&start);
+                            }
+                            if let Some(dir) = d.pick_folder() {
+                                let s = serde_json::Value::String(dir.display().to_string());
+                                let _ = p.send_event(Msg::Js(format!("window.__badzy&&window.__badzy.folder&&window.__badzy.folder({s})")));
+                            }
+                        });
+                    }
                     Msg::Cmd(c, a) => bridge::command(&mgr, &c, &a),
+                    Msg::Js(js) => {
+                        let _ = webview.evaluate_script(&js);
+                    }
                     Msg::Api(ev) => match ev {
                         crate::api::ApiEvent::Show => {
                             window.set_visible(true);

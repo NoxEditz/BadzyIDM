@@ -412,6 +412,8 @@ export default function MainWindow() {
   const w = nat.native ? nat.vw : Number(width);
   const narrow = w <= 1000;
   const extraNarrow = w <= 760;
+  const showPanel = w > 1180;
+  const cw = w - (narrow ? 56 : 208) - (showPanel ? 256 : 0);
 
   /* live rows */
   useEffect(() => {
@@ -654,14 +656,14 @@ export default function MainWindow() {
                 {/* header */}
                 <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-edge/70 bg-panel/80 px-3 py-1.5 backdrop-blur-sm">
                   <span className="label-caps flex-1">Name</span>
-                  {!extraNarrow && <span className="label-caps w-8 text-center">Q</span>}
+                  {cw >= 700 && <span className="label-caps w-8 text-center">Q</span>}
                   <span className="label-caps w-20 text-right">Size</span>
                   <span className="label-caps w-36">Status</span>
-                  {!extraNarrow && <span className="label-caps w-20 text-right">ETA</span>}
+                  {cw >= 790 && <span className="label-caps w-20 text-right">ETA</span>}
                   <span className="label-caps w-24 text-right">Speed</span>
-                  {!narrow && <span className="label-caps w-24 text-right">Last try</span>}
-                  {!narrow && <span className="label-caps w-24 text-right">Added</span>}
-                  {!narrow && <span className="label-caps w-32">Save to</span>}
+                  {cw >= 900 && <span className="label-caps w-24 text-right">Last try</span>}
+                  {cw >= 1010 && <span className="label-caps w-24 text-right">Added</span>}
+                  {cw >= 1130 && <span className="label-caps w-32">Save to</span>}
                   <Tip label="Columns" side="bottom">
                     <button onClick={a.columns} className="-my-1 flex h-6 w-6 items-center justify-center rounded-full text-muted transition-colors hover:bg-accent/12 hover:text-ink" aria-label="Columns">
                       <Columns3 className="h-3.5 w-3.5" />
@@ -701,16 +703,16 @@ export default function MainWindow() {
                       </span>
                       <span className="block text-11 text-muted">{r.queue} queue</span>
                     </span>
-                    {!extraNarrow && <span className="w-8 text-center text-11 text-muted">{r.id}</span>}
+                    {cw >= 700 && <span className="w-8 text-center text-11 text-muted">{r.id}</span>}
                     <span className="w-20 text-right text-12 text-muted">{r.size}</span>
                     <span className="w-36">{statusCell(r)}</span>
-                    {!extraNarrow && <span className="w-20 text-right text-12 text-muted">{r.eta}</span>}
+                    {cw >= 790 && <span className="w-20 text-right text-12 text-muted">{r.eta}</span>}
                     <span className={cn("w-24 text-right text-12", r.status === "running" ? "font-semibold text-accent" : "text-muted")}>
                       {r.speed}
                     </span>
-                    {!narrow && <span className="w-24 text-right text-12 text-muted">{r.lastTry}</span>}
-                    {!narrow && <span className="w-24 text-right text-12 text-muted">{r.added}</span>}
-                    {!narrow && <span className="w-32 truncate text-12 text-muted">{r.saveTo}</span>}
+                    {cw >= 900 && <span className="w-24 text-right text-12 text-muted">{r.lastTry}</span>}
+                    {cw >= 1010 && <span className="w-24 text-right text-12 text-muted">{r.added}</span>}
+                    {cw >= 1130 && <span className="w-32 truncate text-12 text-muted">{r.saveTo}</span>}
                     <span className="w-6" />
                   </motion.button>
                 ))}
@@ -737,7 +739,7 @@ export default function MainWindow() {
           </div>
 
           {/* right panel */}
-          {!narrow && (
+          {showPanel && (
             <aside className="flex w-64 shrink-0 flex-col gap-2.5 overflow-y-auto border-l border-edge/70 bg-panel/40 p-2.5">
               {/* tree */}
               <div className="rounded-card border border-edge bg-panel p-2">
