@@ -2,10 +2,10 @@
 """Draws the six file-type illustrations of the app as clean SVG (a dark
 folder with a glowing red orbit ring and a glyph). Vector: sharp at any size.
 
-    python scripts/make_cards.py        -> crates/app/ui/art/card-<kind>.svg
+    python scripts/make_cards.py        -> legacy/app/ui/art/card-<kind>.svg
 """
 from pathlib import Path
-OUT = Path(__file__).resolve().parent.parent / "crates/app/ui/art"
+OUT = Path(__file__).resolve().parent.parent / "legacy/app/ui/art"
 
 RED, RED2, DARK1, DARK2 = "#f20b36", "#ff4d6a", "#1d1d27", "#0a0a10"
 

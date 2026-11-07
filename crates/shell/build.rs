@@ -13,13 +13,49 @@ fn main() {
         );
     }
     println!("cargo:rerun-if-changed=../../design/prototype/native/dist");
+    // Icon, full version information and a standard manifest for
+    // Badzy.exe. Antivirus programs trust a program more when it says
+    // clearly who made it, what it is and that it runs without admin rights.
     #[cfg(windows)]
     {
+        let version = env!("CARGO_PKG_VERSION");
         let mut res = winresource::WindowsResource::new();
-        res.set_icon("../app/icon.ico");
+        res.set_icon("icon.ico");
         res.set("ProductName", "Badzy");
         res.set("FileDescription", "Badzy");
         res.set("CompanyName", "Badzy");
-        let _ = res.compile();
+        res.set("LegalCopyright", "Copyright (C) 2026 Badzy");
+        res.set("OriginalFilename", "Badzy.exe");
+        res.set("InternalName", "Badzy");
+        res.set("ProductVersion", version);
+        res.set("FileVersion", version);
+        res.set_manifest(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <assemblyIdentity type="win32" name="Badzy.Badzy" version="1.0.0.0" processorArchitecture="*"/>
+  <description>Badzy - download manager</description>
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges>
+        <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
+    </application>
+  </compatibility>
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls" version="6.0.0.0" processorArchitecture="*" publicKeyToken="6595b64144ccf1df" language="*"/>
+    </dependentAssembly>
+  </dependency>
+</assembly>
+"#,
+        );
+        if let Err(e) = res.compile() {
+            println!("cargo:warning=could not embed the Windows icon: {e}");
+        }
     }
 }

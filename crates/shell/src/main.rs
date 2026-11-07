@@ -13,6 +13,8 @@ fn main() {
 }
 
 #[cfg_attr(not(windows), allow(dead_code))]
+mod api;
+#[cfg_attr(not(windows), allow(dead_code))]
 mod bridge;
 
 #[cfg(windows)]
@@ -40,6 +42,7 @@ mod win {
         Ready,
         Rows(String),
         Cmd(String, serde_json::Value),
+        Api(crate::api::ApiEvent),
     }
 
     fn serve(path: &str) -> Response<Cow<'static, [u8]>> {
@@ -55,8 +58,30 @@ mod win {
     }
 
     pub fn run() {
+        // One copy only: the browser extension's port tells us whether Badzy already runs.
+        let data_dir = default_data_dir();
+        let port = swiftget_engine::Settings::load(&data_dir.join("settings.json")).browser_port;
+        let mut first = crate::api::bind(port);
+        if first.is_err() && std::env::args().any(|a| a == "--restarted") {
+            for _ in 0..60 {
+                std::thread::sleep(std::time::Duration::from_millis(250));
+                first = crate::api::bind(port);
+                if first.is_ok() {
+                    break;
+                }
+            }
+        }
+        let server = match first {
+            Ok(s) => Some(s),
+            Err(_) => {
+                if crate::api::notify_existing(port) {
+                    return;
+                }
+                None
+            }
+        };
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(4).enable_all().build().expect("runtime");
-        let mgr = Manager::new(rt.handle().clone(), default_data_dir()).expect("engine");
+        let mgr = Manager::new(rt.handle().clone(), data_dir.clone()).expect("engine");
         let event_loop = EventLoopBuilder::<Msg>::with_user_event().build();
         let proxy = event_loop.create_proxy();
         let window = WindowBuilder::new()
@@ -103,6 +128,18 @@ mod win {
             .build(&window)
             .expect("webview");
 
+        // the browser extension talks to Badzy through this local server
+        if let Some(server) = server {
+            let (proxy, cfg_mgr) = (event_loop.create_proxy(), mgr.clone());
+            crate::api::serve(
+                server,
+                move || crate::api::config_json(&cfg_mgr.settings()),
+                move |ev| {
+                    let _ = proxy.send_event(Msg::Api(ev));
+                },
+            );
+        }
+
         // push the download list to the UI twice a second
         {
             let (proxy, mgr) = (event_loop.create_proxy(), mgr.clone());
@@ -142,6 +179,18 @@ mod win {
                         let _ = webview.evaluate_script(&format!("window.__badzy&&window.__badzy.rows&&window.__badzy.rows({j})"));
                     }
                     Msg::Cmd(c, a) => bridge::command(&mgr, &c, &a),
+                    Msg::Api(ev) => match ev {
+                        crate::api::ApiEvent::Show => {
+                            window.set_visible(true);
+                            window.set_minimized(false);
+                            window.set_focus();
+                        }
+                        other => {
+                            bridge::from_browser(&mgr, other);
+                            window.set_visible(true);
+                            window.set_focus();
+                        }
+                    },
                 },
                 Event::WindowEvent { event: WindowEvent::Resized(_), .. } => {
                     push_state(&webview, window.is_maximized());
@@ -153,5 +202,20 @@ mod win {
                 _ => {}
             }
         });
+    }
+}
+
+/// Friendly texts for the errors people meet most.
+pub(crate) fn err_text(e: &str) -> String {
+    if e.contains("needs a login or an age check") {
+        "This video needs a login or an age check. Open it once in the browser where you are signed in (with the Badzy extension), then try again.".into()
+    } else if e.contains("BitLocker") || e.contains("-2144272384") {
+        "The drive of the download folder is locked by BitLocker. Unlock it in Windows, or choose another folder.".into()
+    } else if e.contains("is already registered") {
+        "This torrent is already running. Wait a little, or exit Badzy and open it again.".into()
+    } else if e.contains("the link has expired or the file was removed") {
+        "The link has expired or the file was removed. Right-click the download and use \"Refresh download address\".".into()
+    } else {
+        e.to_string()
     }
 }

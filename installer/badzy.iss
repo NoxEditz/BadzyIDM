@@ -30,7 +30,7 @@ PrivilegesRequired=lowest
 OutputDir=..\dist
 OutputBaseFilename=Badzy-Setup
 #ifndef NoIcon
-SetupIconFile=..\crates\app\icon.ico
+SetupIconFile=..\crates\shell\icon.ico
 #endif
 UninstallDisplayIcon={app}\{#MyAppExe}
 VersionInfoVersion={#MyAppVersion}

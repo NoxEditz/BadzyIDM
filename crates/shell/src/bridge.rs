@@ -112,3 +112,52 @@ pub fn command(mgr: &Arc<Manager>, cmd: &str, arg: &Value) {
         _ => {}
     }
 }
+
+/// Something sent by the browser extension (a download, links of a page, a playlist).
+pub fn from_browser(mgr: &Arc<Manager>, ev: crate::api::ApiEvent) {
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+    use swiftget_engine::RequestHeaders;
+    static LAST: Mutex<Option<(String, Instant)>> = Mutex::new(None);
+    match ev {
+        crate::api::ApiEvent::Add(req) => {
+            // an older add-in could send the same download over and over
+            {
+                let mut l = LAST.lock().unwrap();
+                let now = Instant::now();
+                if l.as_ref().is_some_and(|(u, at)| *u == req.url && now.duration_since(*at) < Duration::from_secs(10)) {
+                    return;
+                }
+                *l = Some((req.url.clone(), now));
+            }
+            if mgr.find_url(&req.url).is_some() {
+                return;
+            }
+            let mut headers = RequestHeaders {
+                referer: req.referrer,
+                cookies: req.cookies,
+                user_agent: req.user_agent,
+                extra: Vec::new(),
+                auth: None,
+            };
+            if let Some(list) = &req.headers {
+                swiftget_engine::ytdlp::apply_headers(&mut headers, list);
+            }
+            mgr.add(NewDownload {
+                url: req.url,
+                file_name: req.file_name,
+                headers,
+                audio_url: req.audio_url,
+                source_page: req.source_page,
+                source_key: req.source_key,
+                start: true,
+                ..Default::default()
+            });
+        }
+        // the Grabber and playlist windows come with the next steps
+        crate::api::ApiEvent::Playlist(url) => {
+            mgr.add(NewDownload { url, start: true, ..Default::default() });
+        }
+        crate::api::ApiEvent::Links(_) | crate::api::ApiEvent::Show => {}
+    }
+}

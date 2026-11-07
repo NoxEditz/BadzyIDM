@@ -3,8 +3,8 @@
 
   python scripts/make_icons.py
 
-Writes crates/app/ui/icons/*.svg (line icons, tinted by the theme at run time)
-and crates/app/ui/types/*.svg (file-type tiles, each with its own colour).
+Writes legacy/app/ui/icons/*.svg (line icons, tinted by the theme at run time)
+and legacy/app/ui/types/*.svg (file-type tiles, each with its own colour).
 """
 import os
 

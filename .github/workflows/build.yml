@@ -90,7 +90,7 @@ jobs:
           npm install --legacy-peer-deps --no-audit --no-fund
           npm run build:native
       - name: Build release
-        run: cargo build --release
+        run: cargo build --release -p badzy-shell
       - name: Get ffmpeg from the ffmpeg job
         uses: actions/download-artifact@v4
         continue-on-error: true
@@ -226,16 +226,6 @@ jobs:
         with:
           name: Badzy-windows
           path: Badzy-windows.zip
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: Badzy-Setup-Preview
-          path: target/release/Badzy-Setup-Preview.exe
-          if-no-files-found: error
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: Badzy-Web
-          path: target/release/Badzy-Web.exe
-          if-no-files-found: error
       # a release is published only when the commit message says [release]
       # (tag v<version> is created here); the same version again is skipped
       - name: Publish release

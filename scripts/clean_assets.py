@@ -7,7 +7,7 @@ The kit's PNGs were cut out of a flat image, so they have pale pink halos
 around the shapes, hard rectangular edges and a stray duplicate. This
 removes the halos (real artwork is deep red: little green/blue), fades the
 edges of the big art into transparency and trims the duplicate.
-Output: crates/app/ui/art/*.png (small, embedded into the app).
+Output: legacy/app/ui/art/*.png (small, embedded into the app).
 """
 import sys
 from pathlib import Path
@@ -15,7 +15,7 @@ import numpy as np
 from PIL import Image, ImageFilter
 
 KIT = Path(sys.argv[1])
-OUT = Path(__file__).resolve().parent.parent / "crates/app/ui/art"
+OUT = Path(__file__).resolve().parent.parent / "legacy/app/ui/art"
 OUT.mkdir(parents=True, exist_ok=True)
 
 
