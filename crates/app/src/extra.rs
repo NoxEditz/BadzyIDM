@@ -357,22 +357,15 @@ pub(crate) fn is_web_address(s: &str) -> bool {
 }
 
 /// What the newest version brings (shown once after an automatic update).
-const WHATS_NEW: [&str; 15] = [
-    "Arabic: every window now reads from right to left (the program restarts once when the direction changes).",
-    "The program has its own small FFmpeg inside: video and sound are joined, MP3 files are made and live streams are saved, with nothing extra to download.",
-    "Live streams are saved as MP4 files.",
-    "MP3 files keep the title of the audio file.",
-    "Much less memory and processor work, also with many downloads at once.",
-    "No more freezes when a file is deleted or moved during its download, and message windows no longer hide behind the main window.",
-    "Downloads are taken from the browser before its own Save As window opens.",
-    "The browser button finds more videos, also streams in several qualities, and on more sites.",
-    "AV1 qualities are offered when a video has them.",
-    "The window of a download gets smaller when its details are hidden.",
-    "The video button in the browser has five looks to choose from (in the add-in's window).",
-    "A clear message when the download folder is on a drive locked by BitLocker.",
-    "Fixed videos that could not be downloaded on some computers because of the Windows temporary folder.",
-    "The Grabber also finds links written as plain text, and the menu next to the clock is in the program's language.",
-    "The speed limit stays smooth with many connections, and the clipboard also catches the file types you added.",
+const WHATS_NEW: [&str; 8] = [
+    "A completely new look: a modern dark design with smooth animations, rounded corners and sharp icons.",
+    "Every window adapts to its size: the list hides columns when it gets narrow and the side menu folds away.",
+    "A new Add download window with file details, categories, connections and login in one clean form.",
+    "Faster downloads and less memory and processor work, also with many downloads at once.",
+    "The program has its own FFmpeg inside: video and sound are joined, MP3 files are made and live streams are saved.",
+    "One logo everywhere: the program, the taskbar, the tray and the installer.",
+    "Arabic: every window reads from right to left.",
+    "Fixed the white frame that flashed when clicking outside the window.",
 ];
 
 thread_local! {

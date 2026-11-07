@@ -16,24 +16,19 @@ Badzy is based on **Ezoo Download** by Ahmed Ezzat. Read `THIRD-PARTY-NOTICES.tx
 
 ## Redesign status (branch `redesign`)
 
-This section tracks the v2 rework. It is updated with every commit so it always says what is really finished.
-
 | Phase | What | State |
 |---|---|---|
-| 1 | Repo layout (`scripts/`, `docs/`, `assets/`), CI builds Badzy's own LGPL ffmpeg (cached, with a checksum-verified prebuilt fallback), bundles yt-dlp + aria2c with SHA-256 checks, silent install/uninstall test of the setup, release notes from the changelog, auto-update points at `NoxEditz/BadzyIDM` | Done, **not yet run on GitHub Actions** |
-| 2 | One logo: `scripts/make_branding.py` builds `icon.ico` (16-256 px), app and tray icons from `assets/branding/badzy-mark.png`; one AppUserModelID; window/taskbar icons loaded from the exe at the exact system size | Done, needs a look on Windows |
-| 3 | Speed: each connection writes to disk in 1 MiB batches outside the segment lock instead of per network packet. Resume stays exact (only bytes on disk are counted). | Done, 60 engine tests pass |
-| Fix | **HTTP 429 / 503** ("server answered HTTP 429"): treated as "slow down". Honours `Retry-After`, halves the connection count once per burst, waits and continues by itself, no manual Continue needed | Done, unit tested |
-| Fix | **`.badzy-<id>.sgpart` leftovers**: temp files are hidden in Explorer, and at startup orphans (no unfinished download owns them, older than 1 h, download/temp folders only) are deleted | Done, unit tested |
-| 4 | New main window from the mockup: top bar (logo, wordmark, search, update bell, settings), left navigation with the sidebar art and tagline, category tiles, action toolbar, rounded file table with animated shimmering progress, right panel (categories and queues, active downloads, disk space), slide-in menu, dark theme colours of the design kit, marble/slash backgrounds, intro fade-in | Compiles with `cargo check`. **Never seen on screen** (no screenshot tool): spacing and art placement need a first look on Windows |
-| Art | Design kit imported: wordmark, tagline, backgrounds cleaned (`scripts/clean_assets.py`), file-type cards redrawn as vectors (`scripts/make_cards.py`). **The original orbit logo stays the app icon**; the kit's arrow logo is not used | Done |
-| 4b | Restyle dialogs (`dialogs.slint`), empty states, per-download progress window | Not started |
-| 5 | Custom installer design, new README | Not started |
-| Ext | Extension 2.0.0 (sign it again for Firefox): palette aligned with the app, icons from the new master, `update_url` fixed, its tests pass | Done |
+| Repo + CI | `scripts/`, `docs/`, `assets/`; GitHub Actions builds the app, bundled FFmpeg, the Inno installer and the installer preview | Done, runs on every push |
+| Speed | Batched disk writes, HTTP 429/503 back-off, orphan temp-file cleanup | Done, engine tests pass |
+| One logo | The orbit logo everywhere (exe, taskbar, tray, installer) | Done |
+| New main window | Frameless rounded window (also on Windows 10), custom title bar, responsive columns, folding side menu, Active downloads card, crisp SVG icons, own controls | Done, tested on Windows |
+| Add download | Redesigned frameless window from the Lovable prototype | Done |
+| Window frame | White frame flash on focus change removed | Done, needs a check on Windows |
+| What's New | 2.0.0 text rewritten | Done |
+| Other dialogs | Settings, progress, properties, torrent, grabber, scheduler get the same chrome | In progress |
+| Installer | Animated preview (`Badzy-Setup-Preview`) built; a real custom installer is still to decide | Preview only |
 
-**How it was checked.** `cargo test -p swiftget-engine` (67 tests, including 32-connection, pause/resume and outage downloads) and `cargo check -p swiftget` (compiles the whole Slint UI) on Linux. The Windows-only code (taskbar identity, icons, hidden files) and the CI workflow could not be run in the authoring environment, so the first Actions run is the real test.
-
-**Known limits right now:** the new UI has not been screenshotted, so spacing and animation need a visual pass; the installer is still the old design.
+The design reference is the clickable prototype in `design/prototype/` (see `design/README.md`).
 
 ## Quickest Windows build
 

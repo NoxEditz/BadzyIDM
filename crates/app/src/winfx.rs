@@ -86,6 +86,7 @@ fn place_now(w: &slint::Window, maximizable: bool) -> bool {
         // windows without the Windows frame get rounded corners on every Windows
         let frameless = w.with_winit_window(|win: &winit::window::Window| !win.is_decorated()).unwrap_or(false);
         if frameless {
+            hide_frame(w);
             round_shape(w, 20.0, true);
         }
     }
@@ -398,6 +399,39 @@ pub(crate) fn round_corners(w: &slint::Window, border: Option<u32>) {
             // COLORREF is 0x00BBGGRR
             DwmSetWindowAttribute(hwnd as _, DWMWA_BORDER_COLOR, &rgb as *const u32 as *const _, 4);
         }
+    }
+}
+
+/// Frameless windows must never show the Windows frame: without this the
+/// white title bar flashes when the window loses or gets the focus.
+#[cfg(windows)]
+unsafe extern "system" fn no_frame_proc(
+    hwnd: windows_sys::Win32::Foundation::HWND,
+    msg: u32,
+    wparam: windows_sys::Win32::Foundation::WPARAM,
+    lparam: windows_sys::Win32::Foundation::LPARAM,
+    _id: usize,
+    _data: usize,
+) -> windows_sys::Win32::Foundation::LRESULT {
+    use windows_sys::Win32::UI::Shell::DefSubclassProc;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{WM_NCACTIVATE, WM_NCCALCSIZE, WM_NCPAINT};
+    match msg {
+        // -1: "do not repaint the frame"
+        WM_NCACTIVATE => DefSubclassProc(hwnd, msg, wparam, -1),
+        WM_NCPAINT => 0,
+        // the whole window is the client area
+        WM_NCCALCSIZE if wparam != 0 => 0,
+        _ => DefSubclassProc(hwnd, msg, wparam, lparam),
+    }
+}
+
+#[cfg(windows)]
+pub(crate) fn hide_frame(w: &slint::Window) {
+    use windows_sys::Win32::UI::Shell::SetWindowSubclass;
+    let Some(hwnd) = hwnd_of(w) else { return };
+    // SAFETY: the procedure lives for the whole program; the window is ours.
+    unsafe {
+        SetWindowSubclass(hwnd as _, Some(no_frame_proc), 0xBAD2, 0);
     }
 }
 
