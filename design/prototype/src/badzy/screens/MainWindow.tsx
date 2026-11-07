@@ -291,8 +291,9 @@ export default function MainWindow() {
           tone="warning"
           option="Also delete the files from disk"
           confirmLabel={`Clear ${done.length}`}
-          onConfirm={() => {
-            setRows((rs) => rs.filter((r) => r.status !== "finished"));
+          onConfirm={(fromDisk) => {
+            if (nat.native) nat.send("remove", { ids: done.map((r) => r.id), file: !!fromDisk });
+            else setRows((rs) => rs.filter((r) => r.status !== "finished"));
             toast({ title: `${done.length} finished downloads cleared`, tone: "success" });
           }}
         />,
@@ -309,16 +310,17 @@ export default function MainWindow() {
           tone="accent"
           confirmLabel="Redownload"
           onConfirm={() => {
-            setRows((rs) => rs.map((r) => (r.id === sel.id ? { ...r, status: "running", progress: 0, speed: "1.0 MB/s", eta: "calculating…" } : r)));
+            if (nat.native) nat.send("redownload", { ids: [sel.id] });
+            else setRows((rs) => rs.map((r) => (r.id === sel.id ? { ...r, status: "running", progress: 0, speed: "1.0 MB/s", eta: "calculating…" } : r)));
             toast(startedToast(sel.name));
           }}
         />,
       ),
-    openFolder: () => sel && toast({ title: "Opening folder", message: sel.saveTo, tone: "accent", icon: <FolderOpen className="h-4 w-4" /> }),
+    openFolder: () => sel && (nat.native && nat.send("openFolder", { id: sel.id }), true) && toast({ title: "Opening folder", message: sel.saveTo, tone: "accent", icon: <FolderOpen className="h-4 w-4" /> }),
     openFile: () =>
       sel &&
       (sel.status === "finished"
-        ? toast({ title: "Opening file", message: sel.name, tone: "accent", icon: <SquareArrowOutUpRight className="h-4 w-4" /> })
+        ? (nat.native && nat.send("openFile", { id: sel.id }), toast({ title: "Opening file", message: sel.name, tone: "accent", icon: <SquareArrowOutUpRight className="h-4 w-4" /> }))
         : toast({ title: "File isn't finished yet", message: `${sel.progress.toFixed(0)}% downloaded — try “Play while downloading”.`, tone: "warning" })),
     openWith: () => sel && open(<OpenWithDialog file={sel.name} kind={sel.kind} />),
     play: () =>
@@ -326,8 +328,8 @@ export default function MainWindow() {
       (sel.kind === "video" || sel.kind === "audio"
         ? toast({ title: "Playing while downloading", message: `${sel.name} · opening in VLC`, tone: "accent", icon: <MonitorPlay className="h-4 w-4" /> })
         : toast({ title: "Preview not available", message: "Only video and audio can play while downloading.", tone: "warning" })),
-    move: () => sel && open(<MoveRenameDialog name={sel.name} folder={sel.saveTo} kind={sel.kind} />),
-    copy: () => sel && toast({ title: "Address copied", message: `https://cdn.example.com/${sel.name}`, tone: "success", icon: <Share2 className="h-4 w-4" /> }),
+    move: () => sel && open(<MoveRenameDialog id={sel.id} name={sel.name} folder={sel.path ? sel.path.slice(0, Math.max(sel.path.lastIndexOf("\\"), sel.path.lastIndexOf("/"))) : sel.saveTo} kind={sel.kind} />),
+    copy: () => sel && (nat.native && sel.url && void navigator.clipboard?.writeText(sel.url), true) && toast({ title: "Address copied", message: nat.native ? (sel.url ?? "") : `https://cdn.example.com/${sel.name}`, tone: "success", icon: <Share2 className="h-4 w-4" /> }),
     refresh: () => open(<RefreshAddressDialog />),
     properties: () => sel && open(<PropertiesDialog name={sel.name} />),
     details: (r: DownloadRow) => {
@@ -339,13 +341,15 @@ export default function MainWindow() {
     selectAll: () => toast({ title: `${visible.length} downloads selected`, tone: "muted", icon: <SquareStack className="h-4 w-4" /> }),
     startQueue: () => {
       const ids = rows.filter((r) => r.queue === "Main" && (r.status === "paused" || r.status === "queued")).map((r) => r.id);
-      setStatus(ids, "running");
+      if (nat.native) nat.send("startQueue");
+      else setStatus(ids, "running");
       setQueueState((qs) => qs.map((q) => (q.name === "Main queue" ? { ...q, active: true } : q)));
       toast({ title: "Main queue started", message: `${ids.length} downloads resumed`, tone: "accent", icon: <Play className="h-4 w-4" /> });
     },
     stopQueue: () => {
       const ids = rows.filter((r) => r.queue === "Main" && r.status === "running").map((r) => r.id);
-      setStatus(ids, "paused");
+      if (nat.native) nat.send("stopQueue");
+      else setStatus(ids, "paused");
       setQueueState((qs) => qs.map((q) => (q.name === "Main queue" ? { ...q, active: false } : q)));
       toast({ title: "Main queue stopped", message: `${ids.length} downloads paused`, tone: "muted", icon: <Square className="h-4 w-4" /> });
     },

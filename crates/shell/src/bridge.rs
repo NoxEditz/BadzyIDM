@@ -79,6 +79,9 @@ pub fn rows_json(mgr: &Manager) -> String {
                 "lastTry": v.last_try.map(ago).unwrap_or_else(|| "—".into()),
                 "added": ago(v.added_at),
                 "saveTo": v.save_path.parent().map(|p| p.display().to_string()).unwrap_or_default(),
+                "url": v.url,
+                "path": v.save_path.display().to_string(),
+                "error": v.error,
                 "queue": if v.queue.is_some() { "Queue" } else { "Main" },
             })
         })
@@ -93,6 +96,35 @@ pub fn command(mgr: &Arc<Manager>, cmd: &str, arg: &Value) {
         "resume" => ids().into_iter().for_each(|i| mgr.start(i)),
         "pause" => ids().into_iter().for_each(|i| mgr.pause(i)),
         "resumeAll" => mgr.start_all(),
+        "startQueue" => mgr.start_queue(swiftget_engine::config::MAIN_QUEUE),
+        "stopQueue" => mgr.stop_queue(swiftget_engine::config::MAIN_QUEUE),
+        "removeFinished" => mgr.remove_completed(),
+        "redownload" => ids().into_iter().for_each(|i| mgr.restart(i)),
+        "openFile" => {
+            if let Some(v) = arg["id"].as_u64().and_then(|i| mgr.get(i)) {
+                let _ = open::that(&v.save_path);
+            }
+        }
+        "openFolder" => {
+            if let Some(v) = arg["id"].as_u64().and_then(|i| mgr.get(i)) {
+                #[cfg(windows)]
+                {
+                    use std::os::windows::process::CommandExt;
+                    let target = if v.save_path.exists() { v.save_path.clone() } else { v.save_path.parent().map(Into::into).unwrap_or_default() };
+                    let arg = if v.save_path.exists() { format!("/select,\"{}\"", target.display()) } else { format!("\"{}\"", target.display()) };
+                    let _ = std::process::Command::new("explorer").raw_arg(arg).spawn();
+                }
+                #[cfg(not(windows))]
+                if let Some(dir) = v.save_path.parent() {
+                    let _ = open::that(dir);
+                }
+            }
+        }
+        "move" => {
+            if let (Some(id), Some(dir), Some(name)) = (arg["id"].as_u64(), arg["dir"].as_str(), arg["name"].as_str()) {
+                let _ = mgr.change_target(id, std::path::Path::new(dir), name);
+            }
+        }
         "pauseAll" => mgr.pause_all(),
         "remove" => {
             let file = arg["file"].as_bool().unwrap_or(false);

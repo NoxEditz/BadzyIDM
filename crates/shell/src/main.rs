@@ -130,7 +130,7 @@ mod win {
                     "maximize" => Msg::ToggleMaximize,
                     "close" => Msg::Close,
                     "ready" => Msg::Ready,
-                    c @ ("resume" | "pause" | "resumeAll" | "pauseAll" | "remove" | "add" | "probe" | "pickFolder") => {
+                    c @ ("resume" | "pause" | "resumeAll" | "pauseAll" | "remove" | "add" | "probe" | "pickFolder" | "startQueue" | "stopQueue" | "removeFinished" | "redownload" | "openFile" | "openFolder" | "move") => {
                         Msg::Cmd(c.to_string(), v["arg"].clone())
                     }
                     "resize" => Msg::Resize(match v["arg"].as_str().unwrap_or("") {
