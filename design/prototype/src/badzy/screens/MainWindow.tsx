@@ -412,6 +412,18 @@ export default function MainWindow() {
   const w = nat.native ? nat.vw : Number(width);
   const narrow = w <= 1000;
   const extraNarrow = w <= 760;
+  const catCount = (key: string, fake: number) => {
+    if (!nat.native) return fake;
+    const k = categoryKinds[key];
+    return k ? rows.filter((r) => k.includes(r.kind)).length : rows.length;
+  };
+  const navCount = (label: string, fake?: number) => {
+    if (!nat.native) return fake;
+    if (label === "All Downloads") return rows.length;
+    if (label === "Unfinished") return rows.filter((r) => r.status !== "finished").length;
+    if (label === "Finished") return rows.filter((r) => r.status === "finished").length;
+    return fake;
+  };
   const showPanel = w > 1180;
   const cw = w - (narrow ? 56 : 208) - (showPanel ? 256 : 0);
 
@@ -570,7 +582,7 @@ export default function MainWindow() {
                   {!narrow && (
                     <>
                       <span className={cn("flex-1 truncate text-13 font-medium", i === navIdx && "font-semibold")}>{it.label}</span>
-                      {it.count != null && <span className="text-11 text-muted">{it.count}</span>}
+                      {navCount(it.label, it.count) != null && <span className="text-11 text-muted">{navCount(it.label, it.count)}</span>}
                     </>
                   )}
                 </motion.button>
@@ -606,7 +618,7 @@ export default function MainWindow() {
                   <FileTypeTile kind={c.kind} size={26} iconSize={13} />
                   <span>
                     <span className={cn("block text-12 font-semibold", cat === c.key ? "text-accent" : "text-ink")}>{c.label}</span>
-                    <span className="block text-11 text-muted">{c.count}</span>
+                    <span className="block text-11 text-muted">{catCount(c.key, c.count)}</span>
                   </span>
                 </motion.button>
               ))}
@@ -755,7 +767,7 @@ export default function MainWindow() {
                   >
                     <FileTypeTile kind={c.kind} size={20} iconSize={11} />
                     <span className="flex-1">{c.label}</span>
-                    <span className="text-11">{c.count}</span>
+                    <span className="text-11">{catCount(c.key, c.count)}</span>
                   </button>
                 ))}
                 <div className="flex items-center px-1 pb-1.5 pt-2.5">
@@ -766,7 +778,7 @@ export default function MainWindow() {
                   <button key={q.name} onClick={a.queues} className="flex w-full items-center gap-2 rounded-ctl px-1.5 py-1 text-left text-12 text-muted transition-colors hover:bg-raised hover:text-ink">
                     <span className={cn("h-1.5 w-1.5 rounded-full", q.active ? "bg-success" : "bg-muted/40")} />
                     <span className="flex-1">{q.name}</span>
-                    <span className="text-11">{q.count}</span>
+                    <span className="text-11">{nat.native ? "" : q.count}</span>
                   </button>
                 ))}
               </div>
@@ -783,7 +795,8 @@ export default function MainWindow() {
                           className="h-6 w-6"
                           aria-label="Pause"
                           onClick={() => {
-                            setStatus([r.id], "paused");
+                            if (nat.native) nat.send("pause", { ids: [r.id] });
+                            else setStatus([r.id], "paused");
                             toast({ title: "Download paused", message: r.name, tone: "muted", icon: <Pause className="h-4 w-4" /> });
                           }}
                         >
