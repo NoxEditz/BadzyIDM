@@ -114,7 +114,7 @@ export function ProgressWindow({ name = "Interstellar.2014.1080p.mkv" }: { name?
   return (
     <WindowFrame width={460} height={520} title={`${paused ? "Paused" : "Downloading"} — ${name}`}>
       <div className="flex min-h-0 flex-1 flex-col items-center gap-3 overflow-y-auto p-4">
-        <RingProgress value={62} size={104} stroke={8} {...(paused ? { className: "opacity-50" } : {})} />
+        <RingProgress value={62} size={104} stroke={8} className={paused ? "opacity-50" : ""} />
         <div className="grid w-full grid-cols-2 gap-2">
           <div className="rounded-ctl border border-edge bg-raised p-2 text-center">
             <div className="label-caps">Speed</div>

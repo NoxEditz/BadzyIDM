@@ -146,7 +146,7 @@ export function ExtensionInstallDialog() {
 
 /* -------------------------------- error details ------------------------------- */
 
-const log = [
+const log: [string, string][] = [
   ["19:41:02", "Connecting to cdn.example.com (443)…"],
   ["19:41:02", "Server: nginx/1.25 · resumable"],
   ["19:41:03", "Segment 4/8 · 212 MB received"],
@@ -178,7 +178,7 @@ export function ErrorDetailsDialog({ name = "wallpaper_pack_4k.7z", kind = "arch
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto rounded-card border border-edge bg-panel p-2.5 font-mono text-11">
           {log.map(([t, l], i) => (
-            <div key={i} className={cn("flex gap-3 py-0.5", l?.includes("403") ? "text-error" : "text-muted")}>
+            <div key={i} className={cn("flex gap-3 py-0.5", l.includes("403") ? "text-error" : "text-muted")}>
               <span className="text-muted/60">{t}</span>
               {l}
             </div>

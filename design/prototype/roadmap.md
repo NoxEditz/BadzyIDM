@@ -8,3 +8,6 @@
   - [ ] Existing dialogs/tools/settings/tray/extension/installer/arabic buttons wired
   - [ ] Controls without handlers become interactive
   - [ ] Verify in browser
+- [ ] Bring the new design into the Windows app (Rust + Slint) while keeping its real download engine — blocked: needs approach confirmed and GitHub connected
+- [ ] Add a GitHub Actions build workflow based on the original build.yml — blocked: GitHub not connected
+- [ ] Recommend a next step after the remix (answered in chat)

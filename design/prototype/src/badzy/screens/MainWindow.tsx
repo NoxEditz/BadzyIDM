@@ -30,7 +30,7 @@ import {
   Puzzle,
   RefreshCw,
   Search,
-  Settings,
+  Settings as SettingsIcon,
   Settings2,
   Share2,
   Square,
@@ -82,7 +82,7 @@ import {
   TorrentDialog,
   WhatsNewDialog,
 } from "./Tools";
-import SettingsWindow from "./Settings";
+import Settings from "./Settings";
 import type { FileKind } from "../icons";
 
 const WIDTHS = [
@@ -222,7 +222,7 @@ export default function MainWindow() {
     torrent: () => open(<TorrentDialog />),
     scheduler: () => open(<SchedulerDialog />),
     extension: () => open(<ExtensionInstallDialog />),
-    settings: () => open(<SettingsWindow />),
+    settings: () => open(<Settings />),
     limiter: () => open(<SpeedLimiterDialog />),
     queues: () => open(<QueueEditorDialog />),
     columns: () => open(<ColumnsDialog />),
@@ -474,7 +474,7 @@ export default function MainWindow() {
             </Tip>
             <Tip label="Settings">
               <IconButton aria-label="Settings" onClick={a.settings}>
-                <Settings className="h-4 w-4" />
+                <SettingsIcon className="h-4 w-4" />
               </IconButton>
             </Tip>
           </div>
