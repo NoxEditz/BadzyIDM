@@ -2,7 +2,7 @@ import { useEffect, type ReactNode } from "react";
 import { Minus, Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/badzy-logo.png.asset.json";
-import { useApp, useStage } from "./context";
+import { useApp, useNative, useStage } from "./context";
 
 function WinButton({
   danger,
@@ -49,6 +49,9 @@ export function WindowFrame({
 }) {
   const { reportSize, close } = useStage();
   const { toast } = useApp();
+  const nat = useNative();
+  const { inPopup } = useStage();
+  const fill = nat.native && !inPopup;
   useEffect(() => {
     reportSize(width, height);
   }, [width, height, reportSize]);
@@ -57,25 +60,36 @@ export function WindowFrame({
     onClose ??
     close ??
     (() => toast({ title: `${title ?? "Window"} closed`, message: "Reference screen — it stays visible here.", tone: "muted" }));
-  const handleMin =
-    onMinimize ??
+  const handleMin = fill
+    ? (onMinimize ?? (() => nat.send("minimize")))
+    : onMinimize ??
     (() => {
       close?.();
       toast({ title: "Minimized to tray", message: `${title ?? "Badzy"} keeps running in the background.`, tone: "muted" });
     });
-  const handleMax =
-    onMaximize ?? (() => toast({ title: "Fixed-size window", message: "This window uses a fixed size by design.", tone: "muted" }));
+  const handleMax = fill
+    ? (onMaximize ?? (() => nat.send("maximize")))
+    : onMaximize ?? (() => toast({ title: "Fixed-size window", message: "This window uses a fixed size by design.", tone: "muted" }));
 
   return (
     <div
-      style={{ width, height }}
+      style={fill ? { width: "100%", height: "100%" } : { width, height }}
       className={cn(
-        "relative flex flex-col overflow-hidden rounded-window border border-edge bg-window shadow-window",
+        "relative flex flex-col overflow-hidden border border-edge bg-window",
+        fill ? (nat.maximized ? "rounded-none" : "rounded-window") : "rounded-window shadow-window",
         className,
       )}
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 z-30 h-[3px] bg-linear-90 from-accent to-accent-2" />
-      <header className="relative z-20 flex h-9 shrink-0 select-none items-center gap-2 border-b border-edge/70 bg-panel/70 px-3">
+      <header
+        onMouseDown={(e) => {
+          if (fill && e.button === 0 && !(e.target as HTMLElement).closest("button")) nat.send("drag");
+        }}
+        onDoubleClick={(e) => {
+          if (fill && !(e.target as HTMLElement).closest("button")) nat.send("maximize");
+        }}
+        className="relative z-20 flex h-9 shrink-0 select-none items-center gap-2 border-b border-edge/70 bg-panel/70 px-3"
+      >
         <img src={logo.url} alt="Badzy" className="h-[18px] w-[18px] shrink-0 animate-pulse-glow" draggable={false} />
         {title && (
           <span className="truncate text-12 font-semibold text-ink">

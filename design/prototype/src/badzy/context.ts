@@ -51,3 +51,23 @@ export function useWindowClose() {
     if (message) toast(message);
   };
 }
+
+/**
+ * Native mode: the UI is hosted by the Rust shell (WebView2). The window fills
+ * the real OS window, and chrome actions go to Rust through `send`.
+ */
+export type NativeCtx = {
+  native: boolean;
+  vw: number;
+  vh: number;
+  maximized: boolean;
+  send: (cmd: string, arg?: unknown) => void;
+};
+export const NativeContext = createContext<NativeCtx>({
+  native: false,
+  vw: 1120,
+  vh: 680,
+  maximized: false,
+  send: () => {},
+});
+export const useNative = () => useContext(NativeContext);

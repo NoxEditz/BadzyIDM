@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WindowFrame, Wordmark } from "../WindowFrame";
+import { useNative } from "../context";
 import { MarbleArt } from "../MarbleArt";
 import { FileTypeTile } from "../icons";
 import { categories, queues, downloads as seedRows, type DownloadRow } from "../data";
@@ -394,7 +395,8 @@ export default function MainWindow() {
     })[label as "Scheduler"]?.();
   };
 
-  const w = Number(width);
+  const nat = useNative();
+  const w = nat.native ? nat.vw : Number(width);
   const narrow = w <= 1000;
   const extraNarrow = w <= 760;
 
@@ -426,9 +428,9 @@ export default function MainWindow() {
   const running = rows.filter((r) => r.status === "running");
 
   return (
-    <div className="flex flex-col items-center gap-3">
+    <div className={cn("flex flex-col items-center gap-3", nat.native && "h-full")}>
       {/* screen controls (outside the window) */}
-      <div className="flex items-center gap-2">
+      <div className={cn("items-center gap-2", nat.native ? "hidden" : "flex")}>
         <span className="label-caps">Window width</span>
         <Segmented options={WIDTHS.map((x) => ({ value: x.value, label: x.label }))} value={width} onChange={setWidth} />
         <Chip active={empty} onClick={() => setEmpty((e) => !e)}>
@@ -438,11 +440,11 @@ export default function MainWindow() {
 
       <WindowFrame
         width={w}
-        height={680}
+        height={nat.native ? nat.vh : 680}
         title={navIdx === 1 ? "Unfinished" : navIdx === 2 ? "Finished" : "All downloads"}
         onClose={() => open(<ExitDialog running={running.length} />)}
-        onMinimize={() => toast({ title: "Minimized to tray", message: `${running.length} downloads keep running.`, tone: "muted" })}
-        onMaximize={() => setWidth((x) => (x === "1400" ? "1120" : "1400"))}
+        onMinimize={nat.native ? () => nat.send("minimize") : () => toast({ title: "Minimized to tray", message: `${running.length} downloads keep running.`, tone: "muted" })}
+        onMaximize={nat.native ? () => nat.send("maximize") : () => setWidth((x) => (x === "1400" ? "1120" : "1400"))}
       >
         {/* top bar */}
         <div className="relative z-10 flex h-12 shrink-0 items-center gap-3 border-b border-edge/70 px-3">
