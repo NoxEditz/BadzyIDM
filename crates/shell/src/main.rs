@@ -12,8 +12,13 @@ fn main() {
     win::run();
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
+mod bridge;
+
 #[cfg(windows)]
 mod win {
+    use crate::bridge;
+    use swiftget_engine::manager::{default_data_dir, Manager};
     use include_dir::{include_dir, Dir};
     use std::borrow::Cow;
     use tao::{
@@ -33,6 +38,8 @@ mod win {
         ToggleMaximize,
         Close,
         Ready,
+        Rows(String),
+        Cmd(String, serde_json::Value),
     }
 
     fn serve(path: &str) -> Response<Cow<'static, [u8]>> {
@@ -48,6 +55,8 @@ mod win {
     }
 
     pub fn run() {
+        let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(4).enable_all().build().expect("runtime");
+        let mgr = Manager::new(rt.handle().clone(), default_data_dir()).expect("engine");
         let event_loop = EventLoopBuilder::<Msg>::with_user_event().build();
         let proxy = event_loop.create_proxy();
         let window = WindowBuilder::new()
@@ -73,6 +82,9 @@ mod win {
                     "maximize" => Msg::ToggleMaximize,
                     "close" => Msg::Close,
                     "ready" => Msg::Ready,
+                    c @ ("resume" | "pause" | "resumeAll" | "pauseAll" | "remove" | "add") => {
+                        Msg::Cmd(c.to_string(), v["arg"].clone())
+                    }
                     "resize" => Msg::Resize(match v["arg"].as_str().unwrap_or("") {
                         "n" => ResizeDirection::North,
                         "s" => ResizeDirection::South,
@@ -91,6 +103,17 @@ mod win {
             .build(&window)
             .expect("webview");
 
+        // push the download list to the UI twice a second
+        {
+            let (proxy, mgr) = (event_loop.create_proxy(), mgr.clone());
+            std::thread::spawn(move || loop {
+                if proxy.send_event(Msg::Rows(bridge::rows_json(&mgr))).is_err() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            });
+        }
+
         let push_state = |wv: &wry::WebView, maximized: bool| {
             let _ = wv.evaluate_script(&format!(
                 "window.__badzy&&window.__badzy.state({{maximized:{maximized}}})"
@@ -98,6 +121,7 @@ mod win {
         };
 
         event_loop.run(move |event, _, flow| {
+            let _keep = &rt;
             *flow = ControlFlow::Wait;
             match event {
                 Event::UserEvent(m) => match m {
@@ -109,13 +133,23 @@ mod win {
                     }
                     Msg::Minimize => window.set_minimized(true),
                     Msg::ToggleMaximize => window.set_maximized(!window.is_maximized()),
-                    Msg::Close => *flow = ControlFlow::Exit,
+                    Msg::Close => {
+                        mgr.shutdown();
+                        *flow = ControlFlow::Exit
+                    }
                     Msg::Ready => push_state(&webview, window.is_maximized()),
+                    Msg::Rows(j) => {
+                        let _ = webview.evaluate_script(&format!("window.__badzy&&window.__badzy.rows&&window.__badzy.rows({j})"));
+                    }
+                    Msg::Cmd(c, a) => bridge::command(&mgr, &c, &a),
                 },
                 Event::WindowEvent { event: WindowEvent::Resized(_), .. } => {
                     push_state(&webview, window.is_maximized());
                 }
-                Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => *flow = ControlFlow::Exit,
+                Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+                    mgr.shutdown();
+                    *flow = ControlFlow::Exit
+                }
                 _ => {}
             }
         });

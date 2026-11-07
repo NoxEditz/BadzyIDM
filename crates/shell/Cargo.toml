@@ -10,11 +10,16 @@ build = "build.rs"
 name = "Badzy-Web"
 path = "src/main.rs"
 
+[dependencies]
+swiftget-engine = { path = "../engine" }
+tokio.workspace = true
+chrono = "0.4"
+serde_json.workspace = true
+
 [target.'cfg(windows)'.dependencies]
 wry = "0.57"
 tao = "0.37"
 include_dir = "0.7"
-serde_json.workspace = true
 mime_guess = "2"
 
 [target.'cfg(windows)'.build-dependencies]

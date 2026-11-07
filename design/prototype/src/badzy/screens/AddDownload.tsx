@@ -1,3 +1,4 @@
+import { useNative } from "../context";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowDownToLine, FolderSearch, Link2, Lock, TriangleAlert, User } from "lucide-react";
@@ -57,7 +58,8 @@ const toasts = {
 export function AddDownloadWindow({ lang = "en", initialUrl }: { lang?: "en" | "ar"; initialUrl?: string }) {
   const close = useWindowClose();
   const { open } = useApp();
-  const [url, setUrl] = useState(initialUrl ?? "https://cdn.example.com/interstellar-1080p.mkv");
+  const nat = useNative();
+  const [url, setUrl] = useState(initialUrl ?? (nat.native ? "" : "https://cdn.example.com/interstellar-1080p.mkv"));
   const [checked, setChecked] = useState(true);
   const [checking, setChecking] = useState(false);
   const [category, setCategory] = useState("Video");
@@ -180,7 +182,8 @@ export function AddDownloadWindow({ lang = "en", initialUrl }: { lang?: "en" | "
               variant="primary"
               onClick={() => {
                 close();
-                open(<ProgressWindow name={fileName} />);
+                if (nat.native) nat.send("add", { url, start: true });
+                else open(<ProgressWindow name={fileName} />);
               }}
             >
               <motion.span

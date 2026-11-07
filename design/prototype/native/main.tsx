@@ -37,9 +37,10 @@ function NativeApp() {
   useEffect(() => {
     const fit = () => setVp({ w: window.innerWidth, h: window.innerHeight });
     window.addEventListener("resize", fit);
-    (window as unknown as { __badzy: unknown }).__badzy = {
+    const w = window as unknown as { __badzy?: Record<string, unknown> };
+    w.__badzy = Object.assign(w.__badzy ?? {}, {
       state: (s: { maximized?: boolean }) => setMaximized(!!s.maximized),
-    };
+    });
     send("ready");
     return () => window.removeEventListener("resize", fit);
   }, []);

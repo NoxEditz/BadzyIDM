@@ -193,7 +193,16 @@ function statusCell(row: DownloadRow) {
 export default function MainWindow() {
   const [width, setWidth] = useState<"760" | "1000" | "1120" | "1400">("1120");
   const [empty, setEmpty] = useState(false);
-  const [rows, setRows] = useState<DownloadRow[]>(seedRows);
+  const nat0 = useNative();
+  const [rows, setRows] = useState<DownloadRow[]>(nat0.native ? [] : seedRows);
+  useEffect(() => {
+    if (!nat0.native) return;
+    const b = ((window as unknown as { __badzy?: Record<string, unknown> }).__badzy ??= {});
+    b['rows'] = (list: DownloadRow[]) => setRows(list);
+    return () => {
+      delete b['rows'];
+    };
+  }, [nat0.native]);
   const [selected, setSelected] = useState<number>(1);
   const [drawer, setDrawer] = useState(false);
   const [bell, setBell] = useState(false);
@@ -234,18 +243,21 @@ export default function MainWindow() {
     resume: () => {
       if (!sel) return;
       if (sel.status === "finished") return toast({ title: "Already finished", message: sel.name, tone: "muted" });
-      setStatus([sel.id], "running");
+      if (nat.native) nat.send("resume", { ids: [sel.id] });
+      else setStatus([sel.id], "running");
       toast(startedToast(sel.name));
     },
     stop: () => {
       if (!sel) return;
       if (sel.status !== "running") return toast({ title: "Not downloading", message: sel.name, tone: "muted" });
-      setStatus([sel.id], "paused");
+      if (nat.native) nat.send("pause", { ids: [sel.id] });
+      else setStatus([sel.id], "paused");
       toast({ title: "Download paused", message: sel.name, tone: "muted", icon: <Pause className="h-4 w-4" /> });
     },
     stopAll: () => {
       const ids = rows.filter((r) => r.status === "running" || r.status === "queued").map((r) => r.id);
-      setStatus(ids, "paused");
+      if (nat.native) nat.send("pauseAll");
+      else setStatus(ids, "paused");
       setQueueState((qs) => qs.map((q) => ({ ...q, active: false })));
       toast({ title: "All downloads stopped", message: `${ids.length} downloads paused`, tone: "muted", icon: <Square className="h-4 w-4" /> });
     },
@@ -262,7 +274,8 @@ export default function MainWindow() {
           option="Also delete the file from disk"
           confirmLabel="Delete"
           onConfirm={(fromDisk) => {
-            setRows((rs) => rs.filter((r) => r.id !== sel.id));
+            if (nat.native) nat.send("remove", { ids: [sel.id], file: !!fromDisk });
+            else setRows((rs) => rs.filter((r) => r.id !== sel.id));
             toast({ title: fromDisk ? "Download and file deleted" : "Removed from list", message: sel.name, tone: "muted", icon: <Trash2 className="h-4 w-4" /> });
           }}
         />,
@@ -402,6 +415,7 @@ export default function MainWindow() {
 
   /* live rows */
   useEffect(() => {
+    if (nat.native) return;
     const t = setInterval(() => {
       setRows((rs) =>
         rs.map((r) => {

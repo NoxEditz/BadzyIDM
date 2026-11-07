@@ -551,10 +551,13 @@ dependencies = [
 name = "badzy-shell"
 version = "2.0.0"
 dependencies = [
+ "chrono",
  "include_dir",
  "mime_guess",
  "serde_json",
+ "swiftget-engine",
  "tao",
+ "tokio",
  "winresource",
  "wry",
 ]
