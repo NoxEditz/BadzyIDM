@@ -56,7 +56,7 @@ const toasts = {
   ar: { later: "أُضيف إلى قائمة الانتظار", laterMsg: "يبدأ عند تشغيل الطابور.", browser: "أُعيد إلى المتصفح", cancel: "أُلغي التحميل", folder: "تم اختيار المجلد" },
 };
 
-export function AddDownloadWindow({ lang = "en", initialUrl }: { lang?: "en" | "ar"; initialUrl?: string }) {
+export function AddDownloadWindow({ lang = "en", initialUrl, extra, autoCheck }: { lang?: "en" | "ar"; initialUrl?: string; extra?: Record<string, unknown>; autoCheck?: boolean }) {
   const close = useWindowClose();
   const { open } = useApp();
   const nat = useNative();
@@ -83,7 +83,7 @@ export function AddDownloadWindow({ lang = "en", initialUrl }: { lang?: "en" | "
     setProbeErr("");
     setChecked(false);
     setChecking(true);
-    nat.send("probe", { url });
+    nat.send("probe", { url, extra });
   };
   useEffect(() => {
     if (!N) return;
@@ -103,6 +103,10 @@ export function AddDownloadWindow({ lang = "en", initialUrl }: { lang?: "en" | "
       }
     };
     b["folder"] = (p: string) => setSaveAs((cur) => `${p}${p.includes("/") ? "/" : "\\"}${cur.split(/[\\/]/).pop() || ""}`);
+    if (autoCheck && initialUrl) {
+      setChecking(true);
+      nat.send("probe", { url: initialUrl, extra });
+    }
     return () => {
       delete b["probe"];
       delete b["folder"];
@@ -156,7 +160,7 @@ export function AddDownloadWindow({ lang = "en", initialUrl }: { lang?: "en" | "
             )}
           </div>
           {/* warning banner */}
-          <div className="flex items-start gap-2.5 rounded-ctl border border-warning/30 bg-warning/10 p-2.5 text-12 text-warning">
+          <div className={cn("items-start gap-2.5 rounded-ctl border border-warning/30 bg-warning/10 p-2.5 text-12 text-warning", N ? "hidden" : "flex")}>
             <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
             {t.warn}
           </div>
@@ -217,7 +221,7 @@ export function AddDownloadWindow({ lang = "en", initialUrl }: { lang?: "en" | "
             <Button variant="secondary" onClick={() => {
               if (N) {
                 const dir = saveAs.includes(sep) ? saveAs.slice(0, saveAs.lastIndexOf(sep)) : "";
-                nat.send("add", { url, name: info?.name, dir, connections: conn, desc, start: false });
+                nat.send("add", { url, name: info?.name, dir, connections: conn, desc, start: false, extra });
                 close();
                 return;
               }
@@ -230,7 +234,7 @@ export function AddDownloadWindow({ lang = "en", initialUrl }: { lang?: "en" | "
                 close();
                 if (nat.native) {
                   const dir = saveAs.includes(sep) ? saveAs.slice(0, saveAs.lastIndexOf(sep)) : "";
-                  nat.send("add", { url, name: info?.name, dir, connections: conn, desc, start: true, ...(auth ? { login, password } : {}) });
+                  nat.send("add", { url, name: info?.name, dir, connections: conn, desc, start: true, extra, ...(auth ? { login, password } : {}) });
                 }
                 else open(<ProgressWindow name={fileName} />);
               }}

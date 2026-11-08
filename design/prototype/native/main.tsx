@@ -7,6 +7,8 @@ import "@fontsource/outfit/700.css";
 import "@fontsource/kaushan-script/400.css";
 import "../src/styles.css";
 import MainWindow from "../src/badzy/screens/MainWindow";
+import NativeProgress from "../src/badzy/screens/NativeProgress";
+import { AddDownloadWindow } from "../src/badzy/screens/AddDownload";
 import { AppContext, NativeContext, StageContext, type AppCtx, type ToastInput } from "../src/badzy/context";
 import { PopupLayer, ToastStack, type PopupEntry, type ToastEntry } from "../src/badzy/popup";
 
@@ -24,6 +26,24 @@ const EDGES: { dir: string; cls: string; cursor: string }[] = [
   { dir: "sw", cls: "bottom-0 left-0 h-3 w-3", cursor: "nesw-resize" },
   { dir: "se", cls: "bottom-0 right-0 h-3 w-3", cursor: "nwse-resize" },
 ];
+
+/** What this window shows: the main window, or a popup chosen by the address (#add/<data>, #progress/<id>). */
+function Content() {
+  const h = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+  if (h.startsWith("add/")) {
+    let data: Record<string, unknown> = {};
+    try {
+      data = JSON.parse(h.slice(4));
+    } catch {
+      /* empty */
+    }
+    return <AddDownloadWindow initialUrl={String(data["url"] ?? "")} extra={data} autoCheck />;
+  }
+  if (h.startsWith("progress/")) return <NativeProgress id={Number(h.slice(9))} />;
+  return <MainWindow />;
+}
+
+const IS_POPUP = window.location.hash.length > 1;
 
 function NativeApp() {
   const [theme, setTheme] = useState(() => localStorage.getItem("badzy-theme") ?? "red");
@@ -76,10 +96,10 @@ function NativeApp() {
     <AppContext.Provider value={app}>
       <NativeContext.Provider value={nat}>
         <div data-theme={theme} className="fixed inset-0">
-          <StageContext.Provider value={{ reportSize: () => {} }}>
-            <MainWindow />
+          <StageContext.Provider value={IS_POPUP ? { reportSize: () => {}, close: () => send("closeWindow") } : { reportSize: () => {} }}>
+            <Content />
           </StageContext.Provider>
-          {!maximized &&
+          {!maximized && !IS_POPUP &&
             EDGES.map((e) => (
               <div
                 key={e.dir}

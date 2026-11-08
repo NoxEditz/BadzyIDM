@@ -1,10 +1,12 @@
-//! Badzy desktop shell: a frameless, transparent window that hosts the web UI
-//! (design/prototype/native) in WebView2. Rounded corners are drawn by the UI itself.
+//! Badzy desktop shell: frameless, transparent windows that host the web UI
+//! (design/prototype/native) in WebView2: the main window plus small popup windows
+//! (download confirmation, download progress). The extension keeps working while only
+//! the tray icon is left.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 #[cfg(not(windows))]
 fn main() {
-    eprintln!("Badzy-Web runs on Windows only.");
+    eprintln!("Badzy runs on Windows only.");
 }
 
 #[cfg(windows)]
@@ -18,35 +20,62 @@ mod api;
 mod autostart;
 #[cfg_attr(not(windows), allow(dead_code))]
 mod bridge;
+#[cfg(windows)]
+mod tray;
 
 #[cfg(windows)]
 mod win {
-    use crate::bridge;
-    use swiftget_engine::manager::{default_data_dir, Manager};
+    use crate::bridge::{self, FromBrowser};
+    use crate::tray::TrayAct;
     use include_dir::{include_dir, Dir};
     use std::borrow::Cow;
+    use std::collections::HashMap;
+    use swiftget_engine::manager::{default_data_dir, Manager};
+    use tao::dpi::{LogicalSize, PhysicalPosition};
+    use tao::event::{Event, WindowEvent};
+    use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget};
     use tao::platform::windows::WindowExtWindows;
-    use tao::{
-        dpi::LogicalSize,
-        event::{Event, WindowEvent},
-        event_loop::{ControlFlow, EventLoopBuilder},
-        window::{ResizeDirection, WindowBuilder},
-    };
-    use wry::{http::Response, WebContext, WebViewBuilder};
+    use tao::window::{ResizeDirection, Window, WindowBuilder, WindowId};
+    use wry::{http::Response, WebContext, WebView, WebViewBuilder};
 
     static UI: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/../../design/prototype/native/dist");
 
-    enum Msg {
+    enum Act {
         Drag,
         Resize(ResizeDirection),
         Minimize,
         ToggleMaximize,
+        /// the X of a window: the main window goes to the tray, popups close
         Close,
         Ready,
-        Rows(String),
         Cmd(String, serde_json::Value),
+    }
+
+    enum Msg {
+        Win(WindowId, Act),
+        Rows(String),
+        /// JavaScript for the main window
+        JsMain(String),
         Api(crate::api::ApiEvent),
-        Js(String),
+        Tray(TrayAct),
+        Popup(String, (f64, f64)),
+    }
+
+    struct Win {
+        window: Window,
+        webview: WebView,
+        main: bool,
+    }
+
+    fn log(line: &str) {
+        if let Some(dir) = std::env::var_os("LOCALAPPDATA") {
+            let dir = std::path::PathBuf::from(dir).join("Badzy");
+            let _ = std::fs::create_dir_all(&dir);
+            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("shell.log")) {
+                use std::io::Write;
+                let _ = writeln!(f, "{} {line}", chrono::Local::now().format("%F %T"));
+            }
+        }
     }
 
     fn serve(path: &str) -> Response<Cow<'static, [u8]>> {
@@ -61,15 +90,105 @@ mod win {
         }
     }
 
-    fn log(line: &str) {
-        if let Some(dir) = std::env::var_os("LOCALAPPDATA") {
-            let dir = std::path::PathBuf::from(dir).join("Badzy");
-            let _ = std::fs::create_dir_all(&dir);
-            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("shell.log")) {
-                use std::io::Write;
-                let _ = writeln!(f, "{} {line}", chrono::Local::now().format("%F %T"));
+    /// Rounded window outline (22 px like the design). Done with a window region so no
+    /// square or white corner is ever visible, also on Windows 10.
+    fn round_region(window: &Window) {
+        use windows_sys::Win32::Graphics::Gdi::CreateRoundRectRgn;
+        use windows_sys::Win32::UI::WindowsAndMessaging::SetWindowRgn;
+        let hwnd = window.hwnd() as _;
+        unsafe {
+            if window.is_maximized() {
+                SetWindowRgn(hwnd, std::ptr::null_mut(), 1);
+                return;
+            }
+            let size = window.outer_size();
+            let r = (22.0 * window.scale_factor()) as i32;
+            let rgn = CreateRoundRectRgn(0, 0, size.width as i32 + 1, size.height as i32 + 1, r * 2, r * 2);
+            SetWindowRgn(hwnd, rgn, 1);
+        }
+    }
+
+    fn parse_dir(d: &str) -> Option<ResizeDirection> {
+        Some(match d {
+            "n" => ResizeDirection::North,
+            "s" => ResizeDirection::South,
+            "e" => ResizeDirection::East,
+            "w" => ResizeDirection::West,
+            "ne" => ResizeDirection::NorthEast,
+            "nw" => ResizeDirection::NorthWest,
+            "se" => ResizeDirection::SouthEast,
+            "sw" => ResizeDirection::SouthWest,
+            _ => return None,
+        })
+    }
+
+    /// One window with the web UI inside. `hash` tells the UI what to show ("" = main window).
+    fn make_window(
+        target: &EventLoopWindowTarget<Msg>,
+        proxy: &EventLoopProxy<Msg>,
+        ctx: &mut WebContext,
+        hash: &str,
+        size: (f64, f64),
+        min: (f64, f64),
+        visible: bool,
+    ) -> Option<Win> {
+        let main = hash.is_empty();
+        let window = WindowBuilder::new()
+            .with_title("Badzy")
+            .with_decorations(false)
+            .with_transparent(true)
+            .with_minimizable(true)
+            .with_maximizable(main)
+            .with_resizable(main)
+            .with_always_on_top(!main)
+            .with_visible(visible)
+            .with_inner_size(LogicalSize::new(size.0, size.1))
+            .with_min_inner_size(LogicalSize::new(min.0, min.1))
+            .build(target)
+            .ok()?;
+        if !main {
+            if let Some(m) = window.current_monitor().or_else(|| window.primary_monitor()) {
+                let (ms, mp, ws) = (m.size(), m.position(), window.outer_size());
+                window.set_outer_position(PhysicalPosition::new(
+                    mp.x + (ms.width as i32 - ws.width as i32) / 2,
+                    mp.y + (ms.height as i32 - ws.height as i32) / 2,
+                ));
             }
         }
+        let wid = window.id();
+        let p = proxy.clone();
+        let url = format!("http://badzy.localhost/index.html{}", if hash.is_empty() { String::new() } else { format!("#{hash}") });
+        let webview = WebViewBuilder::new_with_web_context(ctx)
+            .with_transparent(true)
+            .with_custom_protocol("badzy".into(), |_id, req| serve(req.uri().path()))
+            .with_ipc_handler(move |req| {
+                let v: serde_json::Value = match serde_json::from_str(req.body()) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        log(&format!("bad ipc message: {e}"));
+                        return;
+                    }
+                };
+                let cmd = v["cmd"].as_str().unwrap_or("");
+                let act = match cmd {
+                    "drag" => Act::Drag,
+                    "minimize" => Act::Minimize,
+                    "maximize" => Act::ToggleMaximize,
+                    "close" | "closeWindow" => Act::Close,
+                    "ready" => Act::Ready,
+                    "resize" => match parse_dir(v["arg"].as_str().unwrap_or("")) {
+                        Some(d) => Act::Resize(d),
+                        None => return,
+                    },
+                    other => Act::Cmd(other.to_string(), v["arg"].clone()),
+                };
+                let _ = p.send_event(Msg::Win(wid, act));
+            })
+            .with_url(url)
+            .build(&window)
+            .ok()?;
+        round_region(&window);
+        Some(Win { window, webview, main })
     }
 
     pub fn run() {
@@ -98,169 +217,223 @@ mod win {
         };
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(4).enable_all().build().expect("runtime");
         let mgr = Manager::new(rt.handle().clone(), data_dir.clone()).expect("engine");
+        let background = std::env::args().any(|a| a == "--background");
+
         let event_loop = EventLoopBuilder::<Msg>::with_user_event().build();
         let proxy = event_loop.create_proxy();
-        let window = WindowBuilder::new()
-            .with_title("Badzy")
-            .with_decorations(false)
-            .with_minimizable(true)
-            .with_maximizable(true)
-            .with_resizable(true)
-            .with_transparent(true)
-            .with_inner_size(LogicalSize::new(1120.0, 700.0))
-            .with_min_inner_size(LogicalSize::new(760.0, 520.0))
-            .build(&event_loop)
-            .expect("window");
-
-        let data = std::env::var_os("LOCALAPPDATA")
-            .map(|p| std::path::PathBuf::from(p).join("Badzy").join("webview"));
-        let mut ctx = WebContext::new(data);
-        let webview = WebViewBuilder::new_with_web_context(&mut ctx)
-            .with_transparent(true)
-            .with_custom_protocol("badzy".into(), |_id, req| serve(req.uri().path()))
-            .with_ipc_handler(move |req| {
-                let v: serde_json::Value = match serde_json::from_str(req.body()) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        log(&format!("bad ipc message: {e}"));
-                        return;
-                    }
-                };
-                let msg = match v["cmd"].as_str().unwrap_or("") {
-                    "drag" => Msg::Drag,
-                    "minimize" => Msg::Minimize,
-                    "maximize" => Msg::ToggleMaximize,
-                    "close" => Msg::Close,
-                    "ready" => Msg::Ready,
-                    c @ ("resume" | "pause" | "resumeAll" | "pauseAll" | "remove" | "add" | "probe" | "pickFolder" | "startQueue" | "stopQueue" | "removeFinished" | "redownload" | "openFile" | "openFolder" | "move" | "settings" | "autostart" | "getSettings") => {
-                        Msg::Cmd(c.to_string(), v["arg"].clone())
-                    }
-                    "resize" => Msg::Resize(match v["arg"].as_str().unwrap_or("") {
-                        "n" => ResizeDirection::North,
-                        "s" => ResizeDirection::South,
-                        "e" => ResizeDirection::East,
-                        "w" => ResizeDirection::West,
-                        "ne" => ResizeDirection::NorthEast,
-                        "nw" => ResizeDirection::NorthWest,
-                        "se" => ResizeDirection::SouthEast,
-                        _ => ResizeDirection::SouthWest,
-                    }),
-                    _ => return,
-                };
-                let _ = proxy.send_event(msg);
-            })
-            .with_url("http://badzy.localhost/index.html")
-            .build(&window)
-            .expect("webview");
 
         // the browser extension talks to Badzy through this local server
         if let Some(server) = server {
-            let (proxy, cfg_mgr) = (event_loop.create_proxy(), mgr.clone());
+            let (p, cfg_mgr) = (proxy.clone(), mgr.clone());
             crate::api::serve(
                 server,
                 move || crate::api::config_json(&cfg_mgr.settings()),
                 move |ev| {
-                    let _ = proxy.send_event(Msg::Api(ev));
+                    let _ = p.send_event(Msg::Api(ev));
                 },
             );
         }
-
-        // push the download list to the UI twice a second
+        // the download list goes to every open window twice a second
         {
-            let (proxy, mgr) = (event_loop.create_proxy(), mgr.clone());
+            let (p, m) = (proxy.clone(), mgr.clone());
             std::thread::spawn(move || loop {
-                if proxy.send_event(Msg::Rows(bridge::rows_json(&mgr))).is_err() {
+                if p.send_event(Msg::Rows(bridge::rows_json(&m))).is_err() {
                     break;
                 }
                 std::thread::sleep(std::time::Duration::from_millis(500));
             });
         }
-
-        let push_state = |wv: &wry::WebView, maximized: bool| {
-            let _ = wv.evaluate_script(&format!(
-                "window.__badzy&&window.__badzy.state({{maximized:{maximized}}})"
-            ));
+        let tray = {
+            let p = proxy.clone();
+            crate::tray::start(move |a| {
+                let _ = p.send_event(Msg::Tray(a));
+            })
         };
+        let has_tray = tray.is_some();
 
-        let reply = event_loop.create_proxy();
-        event_loop.run(move |event, _, flow| {
+        let data = std::env::var_os("LOCALAPPDATA").map(|p| std::path::PathBuf::from(p).join("Badzy").join("webview"));
+        let mut ctx = WebContext::new(data);
+        let mut wins: HashMap<WindowId, Win> = HashMap::new();
+        let mut main_id: Option<WindowId> = None;
+        let pump = proxy.clone();
+
+        event_loop.run(move |event, target, flow| {
+            let _keep = (&rt, &tray);
             *flow = ControlFlow::Wait;
+            let state_js = |w: &Win| format!("window.__badzy&&window.__badzy.state&&window.__badzy.state({{maximized:{}}})", w.window.is_maximized());
             match event {
+                Event::NewEvents(tao::event::StartCause::Init) => {
+                    if let Some(w) = make_window(target, &pump, &mut ctx, "", (1120.0, 700.0), (760.0, 520.0), !background) {
+                        main_id = Some(w.window.id());
+                        wins.insert(w.window.id(), w);
+                    }
+                }
                 Event::UserEvent(m) => match m {
-                    Msg::Drag => {
-                        let _ = window.drag_window();
-                    }
-                    Msg::Resize(d) => {
-                        let _ = window.drag_resize_window(d);
-                    }
-                    Msg::Minimize => unsafe {
-                        // straight to Windows: the most reliable way for a frameless window
-                        windows_sys::Win32::UI::WindowsAndMessaging::ShowWindow(
-                            window.hwnd() as _,
-                            windows_sys::Win32::UI::WindowsAndMessaging::SW_MINIMIZE,
-                        );
-                    },
-                    Msg::ToggleMaximize => window.set_maximized(!window.is_maximized()),
-                    Msg::Close => {
-                        mgr.shutdown();
-                        *flow = ControlFlow::Exit
-                    }
-                    Msg::Ready => push_state(&webview, window.is_maximized()),
                     Msg::Rows(j) => {
-                        let _ = webview.evaluate_script(&format!("window.__badzy&&window.__badzy.rows&&window.__badzy.rows({j})"));
-                    }
-                    Msg::Cmd(c, a) if c == "probe" => {
-                        let (m, p, url) = (mgr.clone(), reply.clone(), a["url"].as_str().unwrap_or("").to_string());
-                        rt.spawn(async move {
-                            let js = bridge::probe_js(m, url).await;
-                            let _ = p.send_event(Msg::Js(js));
-                        });
-                    }
-                    Msg::Cmd(c, a) if c == "pickFolder" => {
-                        let (p, start) = (reply.clone(), a["initial"].as_str().unwrap_or("").to_string());
-                        std::thread::spawn(move || {
-                            let mut d = rfd::FileDialog::new();
-                            if !start.is_empty() {
-                                d = d.set_directory(&start);
-                            }
-                            if let Some(dir) = d.pick_folder() {
-                                let s = serde_json::Value::String(dir.display().to_string());
-                                let _ = p.send_event(Msg::Js(format!("window.__badzy&&window.__badzy.folder&&window.__badzy.folder({s})")));
-                            }
-                        });
-                    }
-                    Msg::Cmd(c, a) => {
-                        bridge::command(&mgr, &c, &a);
-                        if matches!(c.as_str(), "settings" | "autostart" | "getSettings") {
-                            let _ = webview.evaluate_script(&bridge::settings_js(&mgr));
+                        let js = format!("window.__badzy&&window.__badzy.rows&&window.__badzy.rows({j})");
+                        for w in wins.values() {
+                            let _ = w.webview.evaluate_script(&js);
                         }
                     }
-                    Msg::Js(js) => {
-                        let _ = webview.evaluate_script(&js);
+                    Msg::JsMain(js) => {
+                        if let Some(w) = main_id.and_then(|i| wins.get(&i)) {
+                            let _ = w.webview.evaluate_script(&js);
+                        }
+                    }
+                    Msg::Popup(hash, size) => {
+                        if let Some(w) = make_window(target, &pump, &mut ctx, &hash, size, size, true) {
+                            w.window.set_focus();
+                            wins.insert(w.window.id(), w);
+                        }
+                    }
+                    Msg::Tray(a) => {
+                        let show_main = |wins: &HashMap<WindowId, Win>| {
+                            if let Some(w) = main_id.and_then(|i| wins.get(&i)) {
+                                w.window.set_visible(true);
+                                w.window.set_minimized(false);
+                                w.window.set_focus();
+                            }
+                        };
+                        match a {
+                            TrayAct::Show => show_main(&wins),
+                            TrayAct::Add => {
+                                show_main(&wins);
+                                let _ = pump.send_event(Msg::JsMain("window.__badzy&&window.__badzy.openAdd&&window.__badzy.openAdd()".into()));
+                            }
+                            TrayAct::Options => {
+                                show_main(&wins);
+                                let _ = pump.send_event(Msg::JsMain("window.__badzy&&window.__badzy.openSettings&&window.__badzy.openSettings()".into()));
+                            }
+                            TrayAct::ResumeAll => mgr.start_all(),
+                            TrayAct::StopAll => mgr.pause_all(),
+                            TrayAct::Exit => {
+                                mgr.shutdown();
+                                *flow = ControlFlow::Exit;
+                            }
+                        }
                     }
                     Msg::Api(ev) => match ev {
                         crate::api::ApiEvent::Show => {
-                            window.set_visible(true);
-                            window.set_minimized(false);
-                            window.set_focus();
+                            if let Some(w) = main_id.and_then(|i| wins.get(&i)) {
+                                w.window.set_visible(true);
+                                w.window.set_minimized(false);
+                                w.window.set_focus();
+                            }
                         }
-                        other => {
-                            bridge::from_browser(&mgr, other);
-                            window.set_visible(true);
-                            window.set_focus();
-                        }
+                        other => match bridge::from_browser(&mgr, other) {
+                            FromBrowser::Confirm(data) => {
+                                let hash = format!("add/{}", urlencode(&data.to_string()));
+                                let _ = pump.send_event(Msg::Popup(hash, (700.0, 620.0)));
+                            }
+                            FromBrowser::Added(id) => {
+                                if mgr.settings().show_progress_window {
+                                    let _ = pump.send_event(Msg::Popup(format!("progress/{id}"), (460.0, 520.0)));
+                                }
+                            }
+                            FromBrowser::Nothing => {}
+                        },
                     },
+                    Msg::Win(id, act) => {
+                        let Some(w) = wins.get(&id) else { return };
+                        match act {
+                            Act::Drag => {
+                                let _ = w.window.drag_window();
+                            }
+                            Act::Resize(d) => {
+                                let _ = w.window.drag_resize_window(d);
+                            }
+                            Act::Minimize => unsafe {
+                                windows_sys::Win32::UI::WindowsAndMessaging::ShowWindow(
+                                    w.window.hwnd() as _,
+                                    windows_sys::Win32::UI::WindowsAndMessaging::SW_MINIMIZE,
+                                );
+                            },
+                            Act::ToggleMaximize => {
+                                if w.main {
+                                    w.window.set_maximized(!w.window.is_maximized());
+                                }
+                            }
+                            Act::Ready => {
+                                let _ = w.webview.evaluate_script(&state_js(w));
+                            }
+                            Act::Close => {
+                                if w.main {
+                                    if has_tray {
+                                        w.window.set_visible(false);
+                                    } else {
+                                        mgr.shutdown();
+                                        *flow = ControlFlow::Exit;
+                                    }
+                                } else {
+                                    wins.remove(&id);
+                                }
+                            }
+                            Act::Cmd(c, a) if c == "probe" => {
+                                let (m, p, url) = (mgr.clone(), pump.clone(), a["url"].as_str().unwrap_or("").to_string());
+                                let extra = a["extra"].clone();
+                                rt.spawn(async move {
+                                    let js = bridge::probe_js(m, url, extra).await;
+                                    let _ = p.send_event(Msg::Win(id, Act::Cmd("js".into(), serde_json::Value::String(js))));
+                                });
+                            }
+                            Act::Cmd(c, a) if c == "js" => {
+                                if let Some(js) = a.as_str() {
+                                    let _ = w.webview.evaluate_script(js);
+                                }
+                            }
+                            Act::Cmd(c, a) if c == "pickFolder" => {
+                                let (p, start) = (pump.clone(), a["initial"].as_str().unwrap_or("").to_string());
+                                std::thread::spawn(move || {
+                                    let mut d = rfd::FileDialog::new();
+                                    if !start.is_empty() {
+                                        d = d.set_directory(&start);
+                                    }
+                                    if let Some(dir) = d.pick_folder() {
+                                        let s = serde_json::Value::String(dir.display().to_string());
+                                        let js = format!("window.__badzy&&window.__badzy.folder&&window.__badzy.folder({s})");
+                                        let _ = p.send_event(Msg::Win(id, Act::Cmd("js".into(), serde_json::Value::String(js))));
+                                    }
+                                });
+                            }
+                            Act::Cmd(c, a) => {
+                                let added = bridge::command(&mgr, &c, &a);
+                                if matches!(c.as_str(), "settings" | "autostart" | "getSettings") {
+                                    let _ = w.webview.evaluate_script(&bridge::settings_js(&mgr));
+                                }
+                                if let Some(new_id) = added {
+                                    if a["start"].as_bool().unwrap_or(true) && mgr.settings().show_progress_window {
+                                        let _ = pump.send_event(Msg::Popup(format!("progress/{new_id}"), (460.0, 520.0)));
+                                    }
+                                }
+                            }
+                        }
+                    }
                 },
-                Event::WindowEvent { event: WindowEvent::Resized(_), .. } => {
-                    push_state(&webview, window.is_maximized());
+                Event::WindowEvent { window_id, event: WindowEvent::Resized(_), .. } => {
+                    if let Some(w) = wins.get(&window_id) {
+                        round_region(&w.window);
+                        let _ = w.webview.evaluate_script(&state_js(w));
+                    }
                 }
-                Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
-                    mgr.shutdown();
-                    *flow = ControlFlow::Exit
+                Event::WindowEvent { window_id, event: WindowEvent::CloseRequested, .. } => {
+                    let _ = pump.send_event(Msg::Win(window_id, Act::Close));
                 }
                 _ => {}
             }
         });
+    }
+
+    /// Percent-encodes a string for the address of a popup window.
+    fn urlencode(s: &str) -> String {
+        let mut out = String::new();
+        for b in s.bytes() {
+            if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~') {
+                out.push(b as char);
+            } else {
+                out.push_str(&format!("%{b:02X}"));
+            }
+        }
+        out
     }
 }
 

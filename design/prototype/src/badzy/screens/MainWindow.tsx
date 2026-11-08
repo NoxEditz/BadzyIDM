@@ -453,6 +453,18 @@ export default function MainWindow() {
     return () => clearInterval(t);
   }, []);
 
+  useEffect(() => {
+    if (!nat.native) return;
+    const b = ((window as unknown as { __badzy?: Record<string, unknown> }).__badzy ??= {});
+    b["openAdd"] = () => a.addUrl();
+    b["openSettings"] = () => a.settings();
+    return () => {
+      delete b["openAdd"];
+      delete b["openSettings"];
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nat.native]);
+
   const kinds = categoryKinds[cat];
   const visible = rows.filter(
     (r) =>
@@ -478,7 +490,7 @@ export default function MainWindow() {
         width={w}
         height={nat.native ? nat.vh : 680}
         title={navIdx === 1 ? "Unfinished" : navIdx === 2 ? "Finished" : "All downloads"}
-        onClose={() => open(<ExitDialog running={running.length} />)}
+        onClose={() => (nat.native ? nat.send("close") : open(<ExitDialog running={running.length} />))}
         onMinimize={nat.native ? () => nat.send("minimize") : () => toast({ title: "Minimized to tray", message: `${running.length} downloads keep running.`, tone: "muted" })}
         onMaximize={nat.native ? () => nat.send("maximize") : () => setWidth((x) => (x === "1400" ? "1120" : "1400"))}
       >

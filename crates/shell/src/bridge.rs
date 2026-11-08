@@ -90,7 +90,8 @@ pub fn rows_json(mgr: &Manager) -> String {
 }
 
 /// Commands from the UI: {"cmd": "...", "arg": ...}
-pub fn command(mgr: &Arc<Manager>, cmd: &str, arg: &Value) {
+/// Returns the id of a download that was just added (the caller may open its progress window).
+pub fn command(mgr: &Arc<Manager>, cmd: &str, arg: &Value) -> Option<u64> {
     let ids = || -> Vec<u64> { arg["ids"].as_array().map(|a| a.iter().filter_map(Value::as_u64).collect()).unwrap_or_default() };
     match cmd {
         "resume" => ids().into_iter().for_each(|i| mgr.start(i)),
@@ -148,33 +149,44 @@ pub fn command(mgr: &Arc<Manager>, cmd: &str, arg: &Value) {
         }
         "add" => {
             if let Some(url) = arg["url"].as_str().filter(|u| !u.trim().is_empty()) {
-                mgr.add(NewDownload {
+                let mut headers = headers_from(&arg["extra"]);
+                if let (Some(l), Some(p)) = (arg["login"].as_str().filter(|l| !l.is_empty()), arg["password"].as_str()) {
+                    headers.auth = Some((l.to_string(), p.to_string()));
+                }
+                let extra = &arg["extra"];
+                let id = mgr.add(NewDownload {
                     url: url.trim().to_string(),
                     file_name: arg["name"].as_str().filter(|n| !n.is_empty()).map(str::to_string),
                     save_dir: arg["dir"].as_str().filter(|d| !d.is_empty()).map(Into::into),
                     start: arg["start"].as_bool().unwrap_or(true),
                     connections: arg["connections"].as_u64().map(|c| c.clamp(1, 32) as u32),
                     description: arg["desc"].as_str().filter(|d| !d.is_empty()).map(str::to_string),
-                    headers: swiftget_engine::RequestHeaders {
-                        auth: match (arg["login"].as_str(), arg["password"].as_str()) {
-                            (Some(l), Some(p)) if !l.is_empty() => Some((l.to_string(), p.to_string())),
-                            _ => None,
-                        },
-                        ..Default::default()
-                    },
+                    headers,
+                    audio_url: extra["audioUrl"].as_str().map(str::to_string),
+                    source_page: extra["sourcePage"].as_str().map(str::to_string),
+                    source_key: extra["sourceKey"].as_str().map(str::to_string),
                     ..Default::default()
                 });
+                return Some(id);
             }
         }
         _ => {}
     }
+    None
 }
 
-/// Something sent by the browser extension (a download, links of a page, a playlist).
-pub fn from_browser(mgr: &Arc<Manager>, ev: crate::api::ApiEvent) {
+/// What to do with something sent by the browser extension.
+pub enum FromBrowser {
+    Nothing,
+    /// show the "Download File Info" window with this data (the extension's request)
+    Confirm(Value),
+    /// added at once: id of the new download
+    Added(u64),
+}
+
+pub fn from_browser(mgr: &Arc<Manager>, ev: crate::api::ApiEvent) -> FromBrowser {
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
-    use swiftget_engine::RequestHeaders;
     static LAST: Mutex<Option<(String, Instant)>> = Mutex::new(None);
     match ev {
         crate::api::ApiEvent::Add(req) => {
@@ -183,45 +195,54 @@ pub fn from_browser(mgr: &Arc<Manager>, ev: crate::api::ApiEvent) {
                 let mut l = LAST.lock().unwrap();
                 let now = Instant::now();
                 if l.as_ref().is_some_and(|(u, at)| *u == req.url && now.duration_since(*at) < Duration::from_secs(10)) {
-                    return;
+                    return FromBrowser::Nothing;
                 }
                 *l = Some((req.url.clone(), now));
             }
             if mgr.find_url(&req.url).is_some() {
-                return;
+                return FromBrowser::Nothing;
             }
-            let mut headers = RequestHeaders {
-                referer: req.referrer,
-                cookies: req.cookies,
-                user_agent: req.user_agent,
-                extra: Vec::new(),
-                auth: None,
-            };
-            if let Some(list) = &req.headers {
-                swiftget_engine::ytdlp::apply_headers(&mut headers, list);
+            if mgr.settings().show_start_dialog {
+                return FromBrowser::Confirm(json!({
+                    "url": req.url,
+                    "referrer": req.referrer,
+                    "cookies": req.cookies,
+                    "userAgent": req.user_agent,
+                    "fileName": req.file_name,
+                    "headers": req.headers,
+                    "audioUrl": req.audio_url,
+                    "sourcePage": req.source_page,
+                    "sourceKey": req.source_key,
+                }));
             }
-            mgr.add(NewDownload {
+            let extra = json!({
+                "url": req.url, "referrer": req.referrer, "cookies": req.cookies, "userAgent": req.user_agent,
+                "headers": req.headers, "audioUrl": req.audio_url, "sourcePage": req.source_page, "sourceKey": req.source_key,
+            });
+            let id = mgr.add(NewDownload {
                 url: req.url,
                 file_name: req.file_name,
-                headers,
+                headers: headers_from(&extra),
                 audio_url: req.audio_url,
                 source_page: req.source_page,
                 source_key: req.source_key,
                 start: true,
                 ..Default::default()
             });
+            FromBrowser::Added(id)
         }
         // the Grabber and playlist windows come with the next steps
         crate::api::ApiEvent::Playlist(url) => {
             mgr.add(NewDownload { url, start: true, ..Default::default() });
+            FromBrowser::Nothing
         }
-        crate::api::ApiEvent::Links(_) | crate::api::ApiEvent::Show => {}
+        crate::api::ApiEvent::Links(_) | crate::api::ApiEvent::Show => FromBrowser::Nothing,
     }
 }
 
 /// "Check" in the Add window: ask the server what the file is. The answer goes back as JS.
-pub async fn probe_js(mgr: Arc<Manager>, url: String) -> String {
-    let headers = swiftget_engine::RequestHeaders::default();
+pub async fn probe_js(mgr: Arc<Manager>, url: String, extra: Value) -> String {
+    let headers = headers_from(&extra);
     let v = match mgr.probe(url.trim(), &headers).await {
         Ok(p) => {
             let name = p.file_name.clone();
@@ -268,4 +289,22 @@ pub fn settings_js(mgr: &Manager) -> String {
         o.insert("version".into(), json!(env!("CARGO_PKG_VERSION")));
     }
     format!("window.__badzy&&window.__badzy.settings&&window.__badzy.settings({v})")
+}
+
+/// Headers the browser extension sent along with a download.
+pub fn headers_from(extra: &Value) -> swiftget_engine::RequestHeaders {
+    let mut h = swiftget_engine::RequestHeaders {
+        referer: extra["referrer"].as_str().map(str::to_string),
+        cookies: extra["cookies"].as_str().map(str::to_string),
+        user_agent: extra["userAgent"].as_str().map(str::to_string),
+        ..Default::default()
+    };
+    if let Some(list) = extra["headers"].as_array() {
+        let pairs: Vec<(String, String)> = list
+            .iter()
+            .filter_map(|p| Some((p.get(0)?.as_str()?.to_string(), p.get(1)?.as_str()?.to_string())))
+            .collect();
+        swiftget_engine::ytdlp::apply_headers(&mut h, &pairs);
+    }
+    h
 }
