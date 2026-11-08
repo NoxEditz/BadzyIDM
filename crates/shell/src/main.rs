@@ -93,8 +93,7 @@ mod win {
     /// Rounded window outline (22 px like the design). Done with a window region so no
     /// square or white corner is ever visible, also on Windows 10.
     fn round_region(window: &Window) {
-        use windows_sys::Win32::Graphics::Gdi::CreateRoundRectRgn;
-        use windows_sys::Win32::UI::WindowsAndMessaging::SetWindowRgn;
+        use windows_sys::Win32::Graphics::Gdi::{CreateRoundRectRgn, SetWindowRgn};
         let hwnd = window.hwnd() as _;
         unsafe {
             if window.is_maximized() {
