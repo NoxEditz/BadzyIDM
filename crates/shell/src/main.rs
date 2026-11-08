@@ -31,7 +31,7 @@ mod win {
     use std::borrow::Cow;
     use std::collections::HashMap;
     use swiftget_engine::manager::{default_data_dir, Manager};
-    use tao::dpi::{LogicalSize, PhysicalPosition};
+    use tao::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
     use tao::event::{Event, WindowEvent};
     use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy, EventLoopWindowTarget};
     use tao::platform::windows::WindowExtWindows;
@@ -59,12 +59,53 @@ mod win {
         Api(crate::api::ApiEvent),
         Tray(TrayAct),
         Popup(String, (f64, f64)),
+        Status(String),
+        Finished(u64),
     }
 
     struct Win {
         window: Window,
         webview: WebView,
         main: bool,
+        hash: String,
+        /// maximized by us (the work area of the screen); the old place is kept here
+        maximized: bool,
+        restore: Option<(PhysicalPosition<i32>, PhysicalSize<u32>)>,
+    }
+
+    /// The part of the screen the taskbar leaves free: (left, top, right, bottom).
+    fn work_area(window: &Window) -> Option<(i32, i32, i32, i32)> {
+        use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST};
+        unsafe {
+            let mon = MonitorFromWindow(window.hwnd() as _, MONITOR_DEFAULTTONEAREST);
+            let mut mi: MONITORINFO = std::mem::zeroed();
+            mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+            if GetMonitorInfoW(mon, &mut mi) == 0 {
+                return None;
+            }
+            Some((mi.rcWork.left, mi.rcWork.top, mi.rcWork.right, mi.rcWork.bottom))
+        }
+    }
+
+    fn place(window: &Window, x: i32, y: i32, w: i32, h: i32) {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{SetWindowPos, SWP_NOACTIVATE, SWP_NOZORDER};
+        unsafe {
+            SetWindowPos(window.hwnd() as _, std::ptr::null_mut(), x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+    }
+
+    /// Maximize / restore without the invisible frame overhang of a native maximize.
+    fn toggle_maximize(w: &mut Win) {
+        if w.maximized {
+            w.maximized = false;
+            if let Some((p, s)) = w.restore.take() {
+                place(&w.window, p.x, p.y, s.width as i32, s.height as i32);
+            }
+        } else if let Some((l, t, r, b)) = work_area(&w.window) {
+            w.restore = w.window.outer_position().ok().map(|p| (p, w.window.outer_size()));
+            w.maximized = true;
+            place(&w.window, l, t, r - l, b - t);
+        }
     }
 
     fn log(line: &str) {
@@ -92,11 +133,11 @@ mod win {
 
     /// Rounded window outline (22 px like the design). Done with a window region so no
     /// square or white corner is ever visible, also on Windows 10.
-    fn round_region(window: &Window) {
+    fn round_region(window: &Window, maximized: bool) {
         use windows_sys::Win32::Graphics::Gdi::{CreateRoundRectRgn, SetWindowRgn};
         let hwnd = window.hwnd() as _;
         unsafe {
-            if window.is_maximized() {
+            if maximized {
                 SetWindowRgn(hwnd, std::ptr::null_mut(), 1);
                 return;
             }
@@ -135,7 +176,7 @@ mod win {
         let window = WindowBuilder::new()
             .with_title("Badzy")
             .with_decorations(false)
-            .with_transparent(true)
+            .with_transparent(false)
             .with_minimizable(true)
             .with_maximizable(main)
             .with_resizable(main)
@@ -158,7 +199,8 @@ mod win {
         let p = proxy.clone();
         let url = format!("http://badzy.localhost/index.html{}", if hash.is_empty() { String::new() } else { format!("#{hash}") });
         let webview = WebViewBuilder::new_with_web_context(ctx)
-            .with_transparent(true)
+            .with_transparent(false)
+            .with_background_color((8, 9, 15, 255))
             .with_custom_protocol("badzy".into(), |_id, req| serve(req.uri().path()))
             .with_ipc_handler(move |req| {
                 let v: serde_json::Value = match serde_json::from_str(req.body()) {
@@ -186,8 +228,8 @@ mod win {
             .with_url(url)
             .build(&window)
             .ok()?;
-        round_region(&window);
-        Some(Win { window, webview, main })
+        round_region(&window, false);
+        Some(Win { window, webview, main, hash: hash.to_string(), maximized: false, restore: None })
     }
 
     pub fn run() {
@@ -235,11 +277,22 @@ mod win {
         // the download list goes to every open window twice a second
         {
             let (p, m) = (proxy.clone(), mgr.clone());
-            std::thread::spawn(move || loop {
-                if p.send_event(Msg::Rows(bridge::rows_json(&m))).is_err() {
-                    break;
+            std::thread::spawn(move || {
+                let mut last = String::new();
+                loop {
+                    if p.send_event(Msg::Rows(bridge::rows_json(&m))).is_err() {
+                        break;
+                    }
+                    let status = bridge::status_text(&m);
+                    if status != last {
+                        let _ = p.send_event(Msg::Status(status.clone()));
+                        last = status;
+                    }
+                    for id in m.take_completed() {
+                        let _ = p.send_event(Msg::Finished(id));
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(500));
                 }
-                std::thread::sleep(std::time::Duration::from_millis(500));
             });
         }
         let tray = {
@@ -259,7 +312,7 @@ mod win {
         event_loop.run(move |event, target, flow| {
             let _keep = (&rt, &tray);
             *flow = ControlFlow::Wait;
-            let state_js = |w: &Win| format!("window.__badzy&&window.__badzy.state&&window.__badzy.state({{maximized:{}}})", w.window.is_maximized());
+            let state_js = |w: &Win| format!("window.__badzy&&window.__badzy.state&&window.__badzy.state({{maximized:{}}})", w.maximized);
             match event {
                 Event::NewEvents(tao::event::StartCause::Init) => {
                     if let Some(w) = make_window(target, &pump, &mut ctx, "", (1120.0, 700.0), (760.0, 520.0), !background) {
@@ -280,9 +333,36 @@ mod win {
                         }
                     }
                     Msg::Popup(hash, size) => {
+                        // one progress window per download
+                        if hash.starts_with("progress/") {
+                            if let Some(w) = wins.values().find(|w| w.hash == hash) {
+                                w.window.set_focus();
+                                return;
+                            }
+                        }
                         if let Some(w) = make_window(target, &pump, &mut ctx, &hash, size, size, true) {
-                            w.window.set_focus();
+                            if hash.starts_with("finished/") {
+                                // a small notice in the corner of the screen, above the taskbar
+                                if let Some((_, _, r, b)) = work_area(&w.window) {
+                                    let s = w.window.outer_size();
+                                    place(&w.window, r - s.width as i32 - 16, b - s.height as i32 - 16, s.width as i32, s.height as i32);
+                                }
+                            } else {
+                                w.window.set_focus();
+                            }
                             wins.insert(w.window.id(), w);
+                        }
+                    }
+                    Msg::Status(text) => {
+                        if let Some(t) = &tray {
+                            let _ = t.set_tooltip(Some(text));
+                        }
+                    }
+                    Msg::Finished(id) => {
+                        let open = wins.values().any(|w| w.hash == format!("progress/{id}"));
+                        let ok = mgr.get(id).is_some_and(|v| v.save_path.exists());
+                        if !open && ok && mgr.settings().show_complete_dialog {
+                            let _ = pump.send_event(Msg::Popup(format!("finished/{id}"), (390.0, 156.0)));
                         }
                     }
                     Msg::Tray(a) => {
@@ -325,15 +405,13 @@ mod win {
                                 let _ = pump.send_event(Msg::Popup(hash, (700.0, 620.0)));
                             }
                             FromBrowser::Added(id) => {
-                                if mgr.settings().show_progress_window {
-                                    let _ = pump.send_event(Msg::Popup(format!("progress/{id}"), (460.0, 520.0)));
-                                }
+                                let _ = pump.send_event(Msg::Popup(format!("progress/{id}"), (460.0, 520.0)));
                             }
                             FromBrowser::Nothing => {}
                         },
                     },
                     Msg::Win(id, act) => {
-                        let Some(w) = wins.get(&id) else { return };
+                        let Some(w) = wins.get_mut(&id) else { return };
                         match act {
                             Act::Drag => {
                                 let _ = w.window.drag_window();
@@ -349,7 +427,9 @@ mod win {
                             },
                             Act::ToggleMaximize => {
                                 if w.main {
-                                    w.window.set_maximized(!w.window.is_maximized());
+                                    toggle_maximize(w);
+                                    round_region(&w.window, w.maximized);
+                                    let _ = w.webview.evaluate_script(&state_js(w));
                                 }
                             }
                             Act::Ready => {
@@ -400,7 +480,7 @@ mod win {
                                     let _ = w.webview.evaluate_script(&bridge::settings_js(&mgr));
                                 }
                                 if let Some(new_id) = added {
-                                    if a["start"].as_bool().unwrap_or(true) && mgr.settings().show_progress_window {
+                                    if a["start"].as_bool().unwrap_or(true) {
                                         let _ = pump.send_event(Msg::Popup(format!("progress/{new_id}"), (460.0, 520.0)));
                                     }
                                 }
@@ -410,7 +490,7 @@ mod win {
                 },
                 Event::WindowEvent { window_id, event: WindowEvent::Resized(_), .. } => {
                     if let Some(w) = wins.get(&window_id) {
-                        round_region(&w.window);
+                        round_region(&w.window, w.maximized);
                         let _ = w.webview.evaluate_script(&state_js(w));
                     }
                 }

@@ -58,6 +58,8 @@ pub fn rows_json(mgr: &Manager) -> String {
     let rows: Vec<Value> = mgr
         .snapshot()
         .iter()
+        // a finished download whose file is gone from the disk is not shown
+        .filter(|v| v.status != Status::Completed || v.save_path.exists())
         .map(|v| {
             let status = match v.status {
                 Status::Completed => "finished",
@@ -307,4 +309,20 @@ pub fn headers_from(extra: &Value) -> swiftget_engine::RequestHeaders {
         swiftget_engine::ytdlp::apply_headers(&mut h, &pairs);
     }
     h
+}
+
+/// Text for the tray icon: what Badzy is doing now.
+pub fn status_text(mgr: &Manager) -> String {
+    let (mut n, mut speed) = (0, 0.0);
+    for v in mgr.snapshot() {
+        if v.status.is_running() {
+            n += 1;
+            speed += v.speed;
+        }
+    }
+    if n == 0 {
+        "Badzy — nothing downloading".into()
+    } else {
+        format!("Badzy — {n} downloading · {}/s", human_size(speed as u64))
+    }
 }

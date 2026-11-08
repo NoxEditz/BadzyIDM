@@ -8,6 +8,7 @@ import "@fontsource/kaushan-script/400.css";
 import "../src/styles.css";
 import MainWindow from "../src/badzy/screens/MainWindow";
 import NativeProgress from "../src/badzy/screens/NativeProgress";
+import FinishedToast from "../src/badzy/screens/FinishedToast";
 import { AddDownloadWindow } from "../src/badzy/screens/AddDownload";
 import { AppContext, NativeContext, StageContext, type AppCtx, type ToastInput } from "../src/badzy/context";
 import { PopupLayer, ToastStack, type PopupEntry, type ToastEntry } from "../src/badzy/popup";
@@ -39,6 +40,7 @@ function Content() {
     }
     return <AddDownloadWindow initialUrl={String(data["url"] ?? "")} extra={data} autoCheck />;
   }
+  if (h.startsWith("finished/")) return <FinishedToast id={Number(h.slice(9))} />;
   if (h.startsWith("progress/")) return <NativeProgress id={Number(h.slice(9))} />;
   return <MainWindow />;
 }
@@ -116,8 +118,8 @@ function NativeApp() {
   );
 }
 
-document.documentElement.style.background = "transparent";
-document.body.style.background = "transparent";
+document.documentElement.style.background = "#08090f";
+document.body.style.background = "#08090f";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <NativeApp />
