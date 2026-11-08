@@ -109,14 +109,7 @@ mod win {
     }
 
     fn log(line: &str) {
-        if let Some(dir) = std::env::var_os("LOCALAPPDATA") {
-            let dir = std::path::PathBuf::from(dir).join("Badzy");
-            let _ = std::fs::create_dir_all(&dir);
-            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("shell.log")) {
-                use std::io::Write;
-                let _ = writeln!(f, "{} {line}", chrono::Local::now().format("%F %T"));
-            }
-        }
+        bridge::log(line);
     }
 
     fn serve(path: &str) -> Response<Cow<'static, [u8]>> {
@@ -256,6 +249,7 @@ mod win {
                 None
             }
         };
+        bridge::log(&format!("Badzy {} started", env!("CARGO_PKG_VERSION")));
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(4).enable_all().build().expect("runtime");
         let mgr = Manager::new(rt.handle().clone(), data_dir.clone()).expect("engine");
         let background = std::env::args().any(|a| a == "--background");
@@ -279,7 +273,14 @@ mod win {
             let (p, m) = (proxy.clone(), mgr.clone());
             std::thread::spawn(move || {
                 let mut last = String::new();
+                let mut seen = std::collections::HashMap::new();
+                // downloads from the previous run are known already: log only what changes now
+                bridge::watch(&m, &mut seen);
                 loop {
+                    for (name, err) in bridge::watch(&m, &mut seen) {
+                        let msg = serde_json::json!({ "title": "Download failed", "message": format!("{name}: {err}"), "tone": "error" });
+                        let _ = p.send_event(Msg::JsMain(format!("window.__badzy&&window.__badzy.toast&&window.__badzy.toast({msg})")));
+                    }
                     if p.send_event(Msg::Rows(bridge::rows_json(&m))).is_err() {
                         break;
                     }

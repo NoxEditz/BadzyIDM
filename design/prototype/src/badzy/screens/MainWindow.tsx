@@ -458,9 +458,11 @@ export default function MainWindow() {
     const b = ((window as unknown as { __badzy?: Record<string, unknown> }).__badzy ??= {});
     b["openAdd"] = () => a.addUrl();
     b["openSettings"] = () => a.settings();
+    b["toast"] = (x: Parameters<typeof toast>[0]) => toast(x);
     return () => {
       delete b["openAdd"];
       delete b["openSettings"];
+      delete b["toast"];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nat.native]);

@@ -326,3 +326,31 @@ pub fn status_text(mgr: &Manager) -> String {
         format!("Badzy — {n} downloading · {}/s", human_size(speed as u64))
     }
 }
+
+/// Appends a line to %LOCALAPPDATA%\\Badzy\\shell.log (what the app did; for bug reports).
+pub fn log(line: &str) {
+    if let Some(dir) = std::env::var_os("LOCALAPPDATA") {
+        let dir = std::path::PathBuf::from(dir).join("Badzy");
+        let _ = std::fs::create_dir_all(&dir);
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("shell.log")) {
+            use std::io::Write;
+            let _ = writeln!(f, "{} {line}", chrono::Local::now().format("%F %T"));
+        }
+    }
+}
+
+/// Logs every change of state of every download, and returns the texts of new failures.
+pub fn watch(mgr: &Manager, seen: &mut std::collections::HashMap<u64, (Status, Option<String>)>) -> Vec<(String, String)> {
+    let mut failures = Vec::new();
+    for v in mgr.snapshot() {
+        let now = (v.status, v.error.clone());
+        if seen.get(&v.id) != Some(&now) {
+            log(&format!("download {} \"{}\": {:?} error={:?} url={}", v.id, v.file_name, v.status, v.error, v.url));
+            if v.status == Status::Failed {
+                failures.push((v.file_name.clone(), crate::err_text(v.error.as_deref().unwrap_or("the download failed"))));
+            }
+            seen.insert(v.id, now);
+        }
+    }
+    failures
+}
