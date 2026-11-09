@@ -204,6 +204,9 @@ mod win {
                     }
                 };
                 let cmd = v["cmd"].as_str().unwrap_or("");
+                if !matches!(cmd, "drag" | "resize" | "ready") {
+                    bridge::log(&format!("ui command: {cmd}"));
+                }
                 let act = match cmd {
                     "drag" => Act::Drag,
                     "minimize" => Act::Minimize,
@@ -227,6 +230,7 @@ mod win {
 
     pub fn run() {
         std::panic::set_hook(Box::new(|info| log(&format!("PANIC: {info}"))));
+        bridge::log(&format!("launch {} args={:?}", bridge::build_tag(), std::env::args().collect::<Vec<_>>()));
         // One copy only: the browser extension's port tells us whether Badzy already runs.
         let data_dir = default_data_dir();
         let port = swiftget_engine::Settings::load(&data_dir.join("settings.json")).browser_port;
@@ -244,12 +248,13 @@ mod win {
             Ok(s) => Some(s),
             Err(_) => {
                 if crate::api::notify_existing(port) {
+                    bridge::log("another Badzy is already running: asked it to show its window, this copy exits");
                     return;
                 }
                 None
             }
         };
-        bridge::log(&format!("Badzy {} started", env!("CARGO_PKG_VERSION")));
+        bridge::log(&format!("Badzy {} started (exe {:?})", bridge::build_tag(), std::env::current_exe().ok()));
         let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(4).enable_all().build().expect("runtime");
         let mgr = Manager::new(rt.handle().clone(), data_dir.clone()).expect("engine");
         let background = std::env::args().any(|a| a == "--background");
@@ -434,6 +439,10 @@ mod win {
                                 }
                             }
                             Act::Ready => {
+                                let _ = w.webview.evaluate_script(&format!(
+                                    "window.__badzy&&window.__badzy.info&&window.__badzy.info({})",
+                                    serde_json::Value::String(bridge::build_tag())
+                                ));
                                 let _ = w.webview.evaluate_script(&state_js(w));
                             }
                             Act::Close => {

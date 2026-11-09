@@ -13,6 +13,7 @@ fn main() {
         );
     }
     println!("cargo:rerun-if-changed=../../design/prototype/native/dist");
+    println!("cargo:rerun-if-env-changed=GITHUB_SHA");
     // Icon, full version information and a standard manifest for
     // Badzy.exe. Antivirus programs trust a program more when it says
     // clearly who made it, what it is and that it runs without admin rights.

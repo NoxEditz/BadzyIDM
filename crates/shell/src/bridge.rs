@@ -327,16 +327,33 @@ pub fn status_text(mgr: &Manager) -> String {
     }
 }
 
-/// Appends a line to %LOCALAPPDATA%\\Badzy\\shell.log (what the app did; for bug reports).
+/// Appends a line to shell.log. It is written in three places so it is easy to find:
+/// next to Badzy.exe, in %LOCALAPPDATA%\\Badzy and in Badzy's data folder.
 pub fn log(line: &str) {
-    if let Some(dir) = std::env::var_os("LOCALAPPDATA") {
-        let dir = std::path::PathBuf::from(dir).join("Badzy");
-        let _ = std::fs::create_dir_all(&dir);
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("shell.log")) {
-            use std::io::Write;
-            let _ = writeln!(f, "{} {line}", chrono::Local::now().format("%F %T"));
+    use std::io::Write;
+    let stamp = chrono::Local::now().format("%F %T");
+    let mut dirs: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(d) = exe.parent() {
+            dirs.push(d.to_path_buf());
         }
     }
+    if let Some(d) = std::env::var_os("LOCALAPPDATA") {
+        dirs.push(std::path::PathBuf::from(d).join("Badzy"));
+    }
+    dirs.push(swiftget_engine::default_data_dir());
+    for dir in dirs {
+        let _ = std::fs::create_dir_all(&dir);
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("shell.log")) {
+            let _ = writeln!(f, "{stamp} {line}");
+        }
+    }
+}
+
+/// Which build this is (the commit CI built it from), shown in the window title.
+pub fn build_tag() -> String {
+    let sha = option_env!("GITHUB_SHA").unwrap_or("local");
+    format!("{} · {}", env!("CARGO_PKG_VERSION"), &sha[..sha.len().min(7)])
 }
 
 /// Logs every change of state of every download, and returns the texts of new failures.
@@ -353,4 +370,51 @@ pub fn watch(mgr: &Manager, seen: &mut std::collections::HashMap<u64, (Status, O
         }
     }
     failures
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    /// The whole path the UI uses: "probe" + "add" through the bridge, a real HTTP server,
+    /// the engine downloading, and the list JSON the UI shows going from running to finished.
+    #[test]
+    fn add_downloads_a_file_and_the_list_shows_it() {
+        let body: Vec<u8> = (0..3_000_000u32).map(|i| (i % 251) as u8).collect();
+        let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+        let port = server.server_addr().to_ip().unwrap().port();
+        let served = body.clone();
+        std::thread::spawn(move || {
+            for req in server.incoming_requests() {
+                let _ = req.respond(tiny_http::Response::from_data(served.clone()));
+            }
+        });
+        let dir = std::env::temp_dir().join(format!("badzy-shell-test-{port}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
+        let mgr = Manager::new(rt.handle().clone(), dir.join("data")).unwrap();
+        let url = format!("http://127.0.0.1:{port}/test-file.bin");
+
+        let probe = rt.block_on(probe_js(mgr.clone(), url.clone(), Value::Null));
+        assert!(probe.contains("\"ok\":true"), "probe failed: {probe}");
+
+        let id = command(&mgr, "add", &json!({ "url": url, "dir": dir.join("out").display().to_string(), "start": true, "connections": 4 }));
+        assert!(id.is_some(), "add returned no id");
+
+        let start = Instant::now();
+        loop {
+            let rows: Value = serde_json::from_str(&rows_json(&mgr)).unwrap();
+            let row = &rows[0];
+            if row["status"] == "finished" {
+                break;
+            }
+            assert!(row["status"] != "failed", "download failed: {row}");
+            assert!(start.elapsed() < Duration::from_secs(30), "timeout, last row: {row}");
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        let saved = std::fs::read(dir.join("out").join("test-file.bin")).expect("file on disk");
+        assert_eq!(saved, body);
+        mgr.shutdown();
+    }
 }

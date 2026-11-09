@@ -194,6 +194,7 @@ function statusCell(row: DownloadRow) {
 export default function MainWindow() {
   const [width, setWidth] = useState<"760" | "1000" | "1120" | "1400">("1120");
   const [empty, setEmpty] = useState(false);
+  const [buildTag, setBuildTag] = useState("");
   const nat0 = useNative();
   const [rows, setRows] = useState<DownloadRow[]>(nat0.native ? [] : seedRows);
   useEffect(() => {
@@ -459,10 +460,12 @@ export default function MainWindow() {
     b["openAdd"] = () => a.addUrl();
     b["openSettings"] = () => a.settings();
     b["toast"] = (x: Parameters<typeof toast>[0]) => toast(x);
+    b["info"] = (tag: string) => setBuildTag(tag);
     return () => {
       delete b["openAdd"];
       delete b["openSettings"];
       delete b["toast"];
+      delete b["info"];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nat.native]);
@@ -491,7 +494,7 @@ export default function MainWindow() {
       <WindowFrame
         width={w}
         height={nat.native ? nat.vh : 680}
-        title={navIdx === 1 ? "Unfinished" : navIdx === 2 ? "Finished" : "All downloads"}
+        title={(navIdx === 1 ? "Unfinished" : navIdx === 2 ? "Finished" : "All downloads") + (buildTag ? `  ·  v${buildTag}` : "")}
         onClose={() => (nat.native ? nat.send("close") : open(<ExitDialog running={running.length} />))}
         onMinimize={nat.native ? () => nat.send("minimize") : () => toast({ title: "Minimized to tray", message: `${running.length} downloads keep running.`, tone: "muted" })}
         onMaximize={nat.native ? () => nat.send("maximize") : () => setWidth((x) => (x === "1400" ? "1120" : "1400"))}
