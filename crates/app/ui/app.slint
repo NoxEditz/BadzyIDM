@@ -676,10 +676,8 @@ export component MainWindow inherits ThemedWindow {
     preferred-height: 680px;
     min-width: 760px;
     min-height: 440px;
-    // its own rounded title bar (the Windows frame is not drawn); the window is
-    // transparent and the rounded shape below is drawn by the UI itself
+    // its own rounded title bar (the Windows frame is not drawn)
     no-frame: true;
-    background: transparent;
     in-out property <bool> is-max;
     callback win-drag();
     callback win-min();
@@ -960,11 +958,6 @@ export component MainWindow inherits ThemedWindow {
             reject
         }
 
-        // the window's own rounded shape: the window itself is transparent
-        Rectangle {
-            background: Theme.window;
-            border-radius: root.is-max ? 0px : 20px;
-            clip: true;
         VerticalLayout {
             // ---- title strip: drag here, window buttons
             Rectangle {
@@ -1956,7 +1949,6 @@ export component MainWindow inherits ThemedWindow {
                 }
             }
         }
-        }
     }
     // the note of the toolbar button the mouse rests on (drawn above everything)
     Timer {
@@ -2013,7 +2005,6 @@ export component MainWindow inherits ThemedWindow {
     Rectangle {
         border-width: 1px;
         border-color: Theme.accent.transparentize(0.65);
-        border-radius: root.is-max ? 0px : 20px;
         background: transparent;
     }
     if !root.is-max: Rectangle {

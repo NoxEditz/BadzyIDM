@@ -87,11 +87,7 @@ fn place_now(w: &slint::Window, maximizable: bool) -> bool {
         let frameless = w.with_winit_window(|win: &winit::window::Window| !win.is_decorated()).unwrap_or(false);
         if frameless {
             hide_frame(w);
-            // main window and Add window draw their own rounded shape on a transparent
-            // window; others keep the cut-out shape
-            if !draws_own_shape(w) {
-                round_shape(w, 20.0, true);
-            }
+            round_shape(w, 20.0, true);
         }
     }
     placed
@@ -573,11 +569,4 @@ pub(crate) fn disk_space(dir: &std::path::Path) -> Option<(u64, u64)> {
         let _ = dir;
         None
     }
-}
-
-/// Windows that are transparent and draw their own rounded outline (title "Badzy" and the
-/// Add window): no window region is needed for them.
-pub(crate) fn draws_own_shape(w: &slint::Window) -> bool {
-    use slint::winit_030::WinitWindowAccessor;
-    w.with_winit_window(|win: &slint::winit_030::winit::window::Window| win.title() == "Badzy").unwrap_or(false)
 }

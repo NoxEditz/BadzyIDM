@@ -537,6 +537,7 @@ fn main() -> anyhow::Result<()> {
             if let Some(m) = w.upgrade() {
                 let maxed = m.window().is_maximized();
                 m.set_is_max(maxed);
+                winfx::round_shape(m.window(), 20.0, !maxed);
             }
         });
         let w = main.as_weak();
