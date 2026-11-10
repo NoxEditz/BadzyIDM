@@ -80,17 +80,8 @@ jobs:
           node --check extension/options.js
           node extension/test/yt-core.test.js
           node extension/test/background.sim.js
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Build the web UI (Lovable design)
-        working-directory: design/prototype
-        shell: pwsh
-        run: |
-          npm install --legacy-peer-deps --no-audit --no-fund
-          npm run build:native
       - name: Build release
-        run: cargo build --release -p badzy-shell
+        run: cargo build --release
       - name: Get ffmpeg from the ffmpeg job
         uses: actions/download-artifact@v4
         continue-on-error: true

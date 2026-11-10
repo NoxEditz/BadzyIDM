@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { useSettings } from "../settingsStore";
-import { useFolderPick } from "../dialogs/files";
 import { motion } from "framer-motion";
 import {
   BadgeCheck,
@@ -91,90 +89,94 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
 
 /* ---------------------------------- tabs ------------------------------------ */
 
-function Unavailable() {
-  return <div className="py-10 text-center text-13 text-muted">Loading settings…</div>;
-}
-
 function GeneralTab() {
-  const { s, setAutostart, native } = useSettings();
-  if (native && !s) return <Unavailable />;
   return (
     <>
       <Group title="Startup">
-        <Row label="Start Badzy when Windows starts" control={<Switch on={native ? !!s?.autostart : true} onToggle={(v) => (native ? setAutostart(v) : undefined)} />} />
+        <Row label="Start Badzy when Windows starts" control={<Switch on onToggle={() => {}} />} />
+        <Row label="Start minimized to tray" control={<Switch on={false} onToggle={() => {}} />} />
+        <Row label="Check for updates" control={<Dropdown className="w-44" value="Weekly" onChange={() => {}} options={["Every hour", "Daily", "Weekly", "Never"]} />} />
       </Group>
-      <Group title="Program">
-        <Row label="Version" control={<Badge tone="accent">{s?.version ?? "2.0.0"}</Badge>} />
+      <Group title="Behavior">
+        <Row label="Monitor clipboard for links" control={<Switch on onToggle={() => {}} />} />
+        <Row label="Confirm before deleting downloads" control={<Switch on onToggle={() => {}} />} />
+        <Row label="Show completion balloon" control={<Switch on onToggle={() => {}} />} />
+        <Row label="On download double-click" control={<Dropdown className="w-44" value="Open folder" onChange={() => {}} options={["Open folder", "Open file", "Show properties"]} />} />
       </Group>
     </>
   );
 }
 
-const CATS: [string, string, FileKind][] = [
-  ["Video", "Video", "video"],
-  ["Music", "Music", "audio"],
-  ["Programs", "Programs", "program"],
-  ["Documents", "Documents", "doc"],
-  ["Compressed", "Compressed", "archive"],
-  ["Images", "Images", "image"],
-];
-
 function SaveToTab() {
-  const { s, set, native } = useSettings();
-  const { pickFolder } = useFolderPick();
-  if (native && !s) return <Unavailable />;
-  const root = s?.download_dir ?? "D:\\Badzy Downloads";
   return (
     <>
       <Group title="Default folder">
         <Row label="Save new downloads to" control={
           <>
-            <TextField className="w-64" value={root} readOnly />
-            <Button variant="secondary" onClick={() => pickFolder(root, (p) => set({ download_dir: p }))}><FolderOpen className="h-3.5 w-3.5" /> Browse</Button>
+            <TextField className="w-64" value={"D:\\Badzy Downloads"} readOnly />
+            <BrowseButton initial={"D:\\Badzy Downloads"} />
           </>
         } />
+        <Row label="Ask where to save each download" control={<Switch on={false} onToggle={() => {}} />} />
       </Group>
-      <Group title="Category folders (empty = inside the default folder)">
-        {CATS.map(([name, key, kind]) => {
-          const path = s?.category_dirs?.[key] ?? "";
-          return (
-            <Row key={name} label={
-              <span className="flex items-center gap-2"><FileTypeTile kind={kind} size={20} iconSize={11} />{name}</span>
-            } control={
-              <>
-                <TextField className="w-56" value={path} readOnly placeholder="default" />
-                <Button variant="ghost" onClick={() => pickFolder(path || root, (p) => set({ category_dirs: { ...(s?.category_dirs ?? {}), [key]: p } }))}><FolderOpen className="h-3.5 w-3.5" /></Button>
-              </>
-            } />
-          );
-        })}
+      <Group title="Category folders">
+        {([
+          ["Video", "video", "D:\\Movies"],
+          ["Music", "audio", "D:\\Music"],
+          ["Programs", "program", "C:\\Programs"],
+          ["Documents", "doc", "D:\\Docs"],
+          ["Compressed", "archive", "D:\\Archives"],
+        ] as [string, FileKind, string][]).map(([name, kind, path]) => (
+          <Row key={name} label={
+            <span className="flex items-center gap-2"><FileTypeTile kind={kind} size={20} iconSize={11} />{name}</span>
+          } control={
+            <>
+              <TextField className="w-56" value={path} readOnly />
+              <BrowseButton initial={path} variant="ghost" />
+            </>
+          } />
+        ))}
       </Group>
     </>
   );
 }
 
 function DownloadsTab() {
-  const { s, set, native } = useSettings();
-  if (native && !s) return <Unavailable />;
+  const [max, setMax] = useState(4);
+  const [retries, setRetries] = useState(3);
   return (
-    <Group title="Limits">
-      <Row label="Maximum simultaneous downloads" control={<NumberStepper className="w-40" value={s?.max_active ?? 4} onChange={(v) => set({ max_active: v })} min={1} max={32} />} />
-      <Row label="Connections per download" control={<NumberStepper className="w-40" value={s?.connections ?? 8} onChange={(v) => set({ connections: v })} min={1} max={32} />} />
-      <Row label="Retries on failure" control={<NumberStepper className="w-40" value={s?.retries ?? 3} onChange={(v) => set({ retries: v })} min={0} max={10} />} />
-    </Group>
+    <>
+      <Group title="Limits">
+        <Row label="Maximum simultaneous downloads" control={<NumberStepper className="w-40" value={max} onChange={setMax} min={1} max={32} />} />
+        <Row label="Retries on failure" control={<NumberStepper className="w-40" value={retries} onChange={setRetries} min={0} max={10} />} />
+        <Row label="Retry after (seconds)" control={<TextField className="w-40" value="30" />} />
+      </Group>
+      <Group title="Queue behavior">
+        <Row label="Auto-restart failed downloads" control={<Switch on onToggle={() => {}} />} />
+        <Row label="Skip files that already exist" control={<Switch on onToggle={() => {}} />} />
+        <Row label="Move finished to Finished category" control={<Switch on onToggle={() => {}} />} />
+      </Group>
+    </>
   );
 }
 
 function ConnectionTab() {
-  const { s, set, native } = useSettings();
-  if (native && !s) return <Unavailable />;
-  const kb = s?.speed_limit_kb ?? 0;
+  const [dl, setDl] = useState(80);
+  const [ul, setUl] = useState(40);
   return (
-    <Group title="Speed limits">
-      <Row label="Download limit (KB/s)" sub={kb === 0 ? "0 = unlimited" : `${(kb / 1024).toFixed(1)} MB/s`} control={<NumberStepper className="w-40" value={kb} onChange={(v) => set({ speed_limit_kb: v, speed_limit_on: v > 0 })} min={0} max={1000000} />} />
-      <Row label="Speed limiter active" control={<Switch on={!!s?.speed_limit_on} onToggle={(v) => set({ speed_limit_on: v })} />} />
-      <Row label="Torrent upload limit (KB/s)" sub="0 = unlimited" control={<NumberStepper className="w-40" value={s?.torrent_upload_kb ?? 0} onChange={(v) => set({ torrent_upload_kb: v })} min={0} max={1000000} />} />
-    </Group>
+    <>
+      <Group title="Speed limits (KB/s)">
+        <Row label="Download limit" sub={`${Math.round(dl * 128)} KB/s · 0 = unlimited`} control={<Slider className="w-56" value={dl} onChange={setDl} min={0} max={100} />} />
+        <Row label="Upload limit" sub={`${Math.round(ul * 128)} KB/s`} control={<Slider className="w-56" value={ul} onChange={setUl} min={0} max={100} />} />
+        <Row label="Speed limiter active" control={<Switch on onToggle={() => {}} />} />
+      </Group>
+      <Group title="Network">
+        <Row label="Connections per download" control={<Dropdown className="w-40" value="16" onChange={() => {}} options={["4", "8", "16", "32"]} />} />
+        <Row label="Connection timeout (s)" control={<TextField className="w-40" value="45" />} />
+        <Row label="Use proxy" control={<Switch on={false} onToggle={() => {}} />} />
+        <Row label="Proxy type" control={<Dropdown className="w-40" value="HTTP" onChange={() => {}} options={["HTTP", "SOCKS4", "SOCKS5"]} />} />
+      </Group>
+    </>
   );
 }
 

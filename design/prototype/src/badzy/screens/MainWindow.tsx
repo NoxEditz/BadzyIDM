@@ -41,8 +41,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WindowFrame, Wordmark } from "../WindowFrame";
-import { useNative } from "../context";
-import { useSettings } from "../settingsStore";
 import { MarbleArt } from "../MarbleArt";
 import { FileTypeTile } from "../icons";
 import { categories, queues, downloads as seedRows, type DownloadRow } from "../data";
@@ -194,24 +192,11 @@ function statusCell(row: DownloadRow) {
 export default function MainWindow() {
   const [width, setWidth] = useState<"760" | "1000" | "1120" | "1400">("1120");
   const [empty, setEmpty] = useState(false);
-  const [buildTag, setBuildTag] = useState("");
-  const nat0 = useNative();
-  const [rows, setRows] = useState<DownloadRow[]>(nat0.native ? [] : seedRows);
-  useEffect(() => {
-    if (!nat0.native) return;
-    const b = ((window as unknown as { __badzy?: Record<string, unknown> }).__badzy ??= {});
-    b['rows'] = (list: DownloadRow[]) => setRows(list);
-    return () => {
-      delete b['rows'];
-    };
-  }, [nat0.native]);
+  const [rows, setRows] = useState<DownloadRow[]>(seedRows);
   const [selected, setSelected] = useState<number>(1);
   const [drawer, setDrawer] = useState(false);
   const [bell, setBell] = useState(false);
-  const st = useSettings();
-  const [limiterLocal, setLimiter] = useState(true);
-  const limiter = st.native ? !!st.s?.speed_limit_on : limiterLocal;
-  const limitText = st.native ? ((st.s?.speed_limit_kb ?? 0) > 0 ? `Limiter ${((st.s?.speed_limit_kb ?? 0) / 1024).toFixed(1)} MB/s` : "Unlimited") : "Limiter 4 MB/s";
+  const [limiter, setLimiter] = useState(true);
   const [search, setSearch] = useState("");
   const [navIdx, setNavIdx] = useState(0);
   const [cat, setCat] = useState("all");
@@ -238,7 +223,7 @@ export default function MainWindow() {
     scheduler: () => open(<SchedulerDialog />),
     extension: () => open(<ExtensionInstallDialog />),
     settings: () => open(<Settings />),
-    limiter: () => open(st.native ? <Settings initialTab="Connection" /> : <SpeedLimiterDialog />),
+    limiter: () => open(<SpeedLimiterDialog />),
     queues: () => open(<QueueEditorDialog />),
     columns: () => open(<ColumnsDialog />),
     find: () => open(<FindDialog />),
@@ -248,21 +233,18 @@ export default function MainWindow() {
     resume: () => {
       if (!sel) return;
       if (sel.status === "finished") return toast({ title: "Already finished", message: sel.name, tone: "muted" });
-      if (nat.native) nat.send("resume", { ids: [sel.id] });
-      else setStatus([sel.id], "running");
+      setStatus([sel.id], "running");
       toast(startedToast(sel.name));
     },
     stop: () => {
       if (!sel) return;
       if (sel.status !== "running") return toast({ title: "Not downloading", message: sel.name, tone: "muted" });
-      if (nat.native) nat.send("pause", { ids: [sel.id] });
-      else setStatus([sel.id], "paused");
+      setStatus([sel.id], "paused");
       toast({ title: "Download paused", message: sel.name, tone: "muted", icon: <Pause className="h-4 w-4" /> });
     },
     stopAll: () => {
       const ids = rows.filter((r) => r.status === "running" || r.status === "queued").map((r) => r.id);
-      if (nat.native) nat.send("pauseAll");
-      else setStatus(ids, "paused");
+      setStatus(ids, "paused");
       setQueueState((qs) => qs.map((q) => ({ ...q, active: false })));
       toast({ title: "All downloads stopped", message: `${ids.length} downloads paused`, tone: "muted", icon: <Square className="h-4 w-4" /> });
     },
@@ -279,8 +261,7 @@ export default function MainWindow() {
           option="Also delete the file from disk"
           confirmLabel="Delete"
           onConfirm={(fromDisk) => {
-            if (nat.native) nat.send("remove", { ids: [sel.id], file: !!fromDisk });
-            else setRows((rs) => rs.filter((r) => r.id !== sel.id));
+            setRows((rs) => rs.filter((r) => r.id !== sel.id));
             toast({ title: fromDisk ? "Download and file deleted" : "Removed from list", message: sel.name, tone: "muted", icon: <Trash2 className="h-4 w-4" /> });
           }}
         />,
@@ -296,9 +277,8 @@ export default function MainWindow() {
           tone="warning"
           option="Also delete the files from disk"
           confirmLabel={`Clear ${done.length}`}
-          onConfirm={(fromDisk) => {
-            if (nat.native) nat.send("remove", { ids: done.map((r) => r.id), file: !!fromDisk });
-            else setRows((rs) => rs.filter((r) => r.status !== "finished"));
+          onConfirm={() => {
+            setRows((rs) => rs.filter((r) => r.status !== "finished"));
             toast({ title: `${done.length} finished downloads cleared`, tone: "success" });
           }}
         />,
@@ -315,17 +295,16 @@ export default function MainWindow() {
           tone="accent"
           confirmLabel="Redownload"
           onConfirm={() => {
-            if (nat.native) nat.send("redownload", { ids: [sel.id] });
-            else setRows((rs) => rs.map((r) => (r.id === sel.id ? { ...r, status: "running", progress: 0, speed: "1.0 MB/s", eta: "calculating…" } : r)));
+            setRows((rs) => rs.map((r) => (r.id === sel.id ? { ...r, status: "running", progress: 0, speed: "1.0 MB/s", eta: "calculating…" } : r)));
             toast(startedToast(sel.name));
           }}
         />,
       ),
-    openFolder: () => sel && (nat.native && nat.send("openFolder", { id: sel.id }), true) && toast({ title: "Opening folder", message: sel.saveTo, tone: "accent", icon: <FolderOpen className="h-4 w-4" /> }),
+    openFolder: () => sel && toast({ title: "Opening folder", message: sel.saveTo, tone: "accent", icon: <FolderOpen className="h-4 w-4" /> }),
     openFile: () =>
       sel &&
       (sel.status === "finished"
-        ? (nat.native && nat.send("openFile", { id: sel.id }), toast({ title: "Opening file", message: sel.name, tone: "accent", icon: <SquareArrowOutUpRight className="h-4 w-4" /> }))
+        ? toast({ title: "Opening file", message: sel.name, tone: "accent", icon: <SquareArrowOutUpRight className="h-4 w-4" /> })
         : toast({ title: "File isn't finished yet", message: `${sel.progress.toFixed(0)}% downloaded — try “Play while downloading”.`, tone: "warning" })),
     openWith: () => sel && open(<OpenWithDialog file={sel.name} kind={sel.kind} />),
     play: () =>
@@ -333,8 +312,8 @@ export default function MainWindow() {
       (sel.kind === "video" || sel.kind === "audio"
         ? toast({ title: "Playing while downloading", message: `${sel.name} · opening in VLC`, tone: "accent", icon: <MonitorPlay className="h-4 w-4" /> })
         : toast({ title: "Preview not available", message: "Only video and audio can play while downloading.", tone: "warning" })),
-    move: () => sel && open(<MoveRenameDialog id={sel.id} name={sel.name} folder={sel.path ? sel.path.slice(0, Math.max(sel.path.lastIndexOf("\\"), sel.path.lastIndexOf("/"))) : sel.saveTo} kind={sel.kind} />),
-    copy: () => sel && (nat.native && sel.url && void navigator.clipboard?.writeText(sel.url), true) && toast({ title: "Address copied", message: nat.native ? (sel.url ?? "") : `https://cdn.example.com/${sel.name}`, tone: "success", icon: <Share2 className="h-4 w-4" /> }),
+    move: () => sel && open(<MoveRenameDialog name={sel.name} folder={sel.saveTo} kind={sel.kind} />),
+    copy: () => sel && toast({ title: "Address copied", message: `https://cdn.example.com/${sel.name}`, tone: "success", icon: <Share2 className="h-4 w-4" /> }),
     refresh: () => open(<RefreshAddressDialog />),
     properties: () => sel && open(<PropertiesDialog name={sel.name} />),
     details: (r: DownloadRow) => {
@@ -346,15 +325,13 @@ export default function MainWindow() {
     selectAll: () => toast({ title: `${visible.length} downloads selected`, tone: "muted", icon: <SquareStack className="h-4 w-4" /> }),
     startQueue: () => {
       const ids = rows.filter((r) => r.queue === "Main" && (r.status === "paused" || r.status === "queued")).map((r) => r.id);
-      if (nat.native) nat.send("startQueue");
-      else setStatus(ids, "running");
+      setStatus(ids, "running");
       setQueueState((qs) => qs.map((q) => (q.name === "Main queue" ? { ...q, active: true } : q)));
       toast({ title: "Main queue started", message: `${ids.length} downloads resumed`, tone: "accent", icon: <Play className="h-4 w-4" /> });
     },
     stopQueue: () => {
       const ids = rows.filter((r) => r.queue === "Main" && r.status === "running").map((r) => r.id);
-      if (nat.native) nat.send("stopQueue");
-      else setStatus(ids, "paused");
+      setStatus(ids, "paused");
       setQueueState((qs) => qs.map((q) => (q.name === "Main queue" ? { ...q, active: false } : q)));
       toast({ title: "Main queue stopped", message: `${ids.length} downloads paused`, tone: "muted", icon: <Square className="h-4 w-4" /> });
     },
@@ -417,28 +394,12 @@ export default function MainWindow() {
     })[label as "Scheduler"]?.();
   };
 
-  const nat = useNative();
-  const w = nat.native ? nat.vw : Number(width);
+  const w = Number(width);
   const narrow = w <= 1000;
   const extraNarrow = w <= 760;
-  const catCount = (key: string, fake: number) => {
-    if (!nat.native) return fake;
-    const k = categoryKinds[key];
-    return k ? rows.filter((r) => k.includes(r.kind)).length : rows.length;
-  };
-  const navCount = (label: string, fake?: number) => {
-    if (!nat.native) return fake;
-    if (label === "All Downloads") return rows.length;
-    if (label === "Unfinished") return rows.filter((r) => r.status !== "finished").length;
-    if (label === "Finished") return rows.filter((r) => r.status === "finished").length;
-    return fake;
-  };
-  const showPanel = w > 1180;
-  const cw = w - (narrow ? 56 : 208) - (showPanel ? 256 : 0);
 
   /* live rows */
   useEffect(() => {
-    if (nat.native) return;
     const t = setInterval(() => {
       setRows((rs) =>
         rs.map((r) => {
@@ -454,22 +415,6 @@ export default function MainWindow() {
     return () => clearInterval(t);
   }, []);
 
-  useEffect(() => {
-    if (!nat.native) return;
-    const b = ((window as unknown as { __badzy?: Record<string, unknown> }).__badzy ??= {});
-    b["openAdd"] = () => a.addUrl();
-    b["openSettings"] = () => a.settings();
-    b["toast"] = (x: Parameters<typeof toast>[0]) => toast(x);
-    b["info"] = (tag: string) => setBuildTag(tag);
-    return () => {
-      delete b["openAdd"];
-      delete b["openSettings"];
-      delete b["toast"];
-      delete b["info"];
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nat.native]);
-
   const kinds = categoryKinds[cat];
   const visible = rows.filter(
     (r) =>
@@ -481,9 +426,9 @@ export default function MainWindow() {
   const running = rows.filter((r) => r.status === "running");
 
   return (
-    <div className={cn("flex flex-col items-center gap-3", nat.native && "h-full")}>
+    <div className="flex flex-col items-center gap-3">
       {/* screen controls (outside the window) */}
-      <div className={cn("items-center gap-2", nat.native ? "hidden" : "flex")}>
+      <div className="flex items-center gap-2">
         <span className="label-caps">Window width</span>
         <Segmented options={WIDTHS.map((x) => ({ value: x.value, label: x.label }))} value={width} onChange={setWidth} />
         <Chip active={empty} onClick={() => setEmpty((e) => !e)}>
@@ -493,11 +438,11 @@ export default function MainWindow() {
 
       <WindowFrame
         width={w}
-        height={nat.native ? nat.vh : 680}
-        title={(navIdx === 1 ? "Unfinished" : navIdx === 2 ? "Finished" : "All downloads") + (buildTag ? `  ·  v${buildTag}` : "")}
-        onClose={() => (nat.native ? nat.send("close") : open(<ExitDialog running={running.length} />))}
-        onMinimize={nat.native ? () => nat.send("minimize") : () => toast({ title: "Minimized to tray", message: `${running.length} downloads keep running.`, tone: "muted" })}
-        onMaximize={nat.native ? () => nat.send("maximize") : () => setWidth((x) => (x === "1400" ? "1120" : "1400"))}
+        height={680}
+        title={navIdx === 1 ? "Unfinished" : navIdx === 2 ? "Finished" : "All downloads"}
+        onClose={() => open(<ExitDialog running={running.length} />)}
+        onMinimize={() => toast({ title: "Minimized to tray", message: `${running.length} downloads keep running.`, tone: "muted" })}
+        onMaximize={() => setWidth((x) => (x === "1400" ? "1120" : "1400"))}
       >
         {/* top bar */}
         <div className="relative z-10 flex h-12 shrink-0 items-center gap-3 border-b border-edge/70 px-3">
@@ -607,7 +552,7 @@ export default function MainWindow() {
                   {!narrow && (
                     <>
                       <span className={cn("flex-1 truncate text-13 font-medium", i === navIdx && "font-semibold")}>{it.label}</span>
-                      {navCount(it.label, it.count) != null && <span className="text-11 text-muted">{navCount(it.label, it.count)}</span>}
+                      {it.count != null && <span className="text-11 text-muted">{it.count}</span>}
                     </>
                   )}
                 </motion.button>
@@ -643,7 +588,7 @@ export default function MainWindow() {
                   <FileTypeTile kind={c.kind} size={26} iconSize={13} />
                   <span>
                     <span className={cn("block text-12 font-semibold", cat === c.key ? "text-accent" : "text-ink")}>{c.label}</span>
-                    <span className="block text-11 text-muted">{catCount(c.key, c.count)}</span>
+                    <span className="block text-11 text-muted">{c.count}</span>
                   </span>
                 </motion.button>
               ))}
@@ -667,7 +612,7 @@ export default function MainWindow() {
               <Chip active={limiter} onClick={a.limiter} onContextMenu={(e) => { e.preventDefault(); setLimiter((l) => !l); }}>
                 <Gauge className="h-3 w-3" /> Limiter {limiter ? "on" : "off"}
               </Chip>
-              <Switch on={limiter} onToggle={(v) => { if (st.native) st.set({ speed_limit_on: v }); else setLimiter(v); toast({ title: v ? "Speed limiter on" : "Speed limiter off", message: v ? limitText.replace("Limiter ", "") : "Full speed", tone: "accent", icon: <Gauge className="h-4 w-4" /> }); }} label="Limiter" />
+              <Switch on={limiter} onToggle={(v) => { setLimiter(v); toast({ title: v ? "Speed limiter on" : "Speed limiter off", message: v ? "4 MB/s" : "Full speed", tone: "accent", icon: <Gauge className="h-4 w-4" /> }); }} label="Limiter" />
               <span className="mx-1 h-5 w-px bg-edge" />
               <Button variant="secondary" size="sm" onClick={a.startQueue}><Play className="h-3.5 w-3.5" /> Start Queue</Button>
               <Button variant="secondary" size="sm" onClick={a.stopQueue}><Square className="h-3.5 w-3.5" /> Stop Queue</Button>
@@ -693,14 +638,14 @@ export default function MainWindow() {
                 {/* header */}
                 <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-edge/70 bg-panel/80 px-3 py-1.5 backdrop-blur-sm">
                   <span className="label-caps flex-1">Name</span>
-                  {cw >= 700 && <span className="label-caps w-8 text-center">Q</span>}
+                  {!extraNarrow && <span className="label-caps w-8 text-center">Q</span>}
                   <span className="label-caps w-20 text-right">Size</span>
                   <span className="label-caps w-36">Status</span>
-                  {cw >= 790 && <span className="label-caps w-20 text-right">ETA</span>}
+                  {!extraNarrow && <span className="label-caps w-20 text-right">ETA</span>}
                   <span className="label-caps w-24 text-right">Speed</span>
-                  {cw >= 900 && <span className="label-caps w-24 text-right">Last try</span>}
-                  {cw >= 1010 && <span className="label-caps w-24 text-right">Added</span>}
-                  {cw >= 1130 && <span className="label-caps w-32">Save to</span>}
+                  {!narrow && <span className="label-caps w-24 text-right">Last try</span>}
+                  {!narrow && <span className="label-caps w-24 text-right">Added</span>}
+                  {!narrow && <span className="label-caps w-32">Save to</span>}
                   <Tip label="Columns" side="bottom">
                     <button onClick={a.columns} className="-my-1 flex h-6 w-6 items-center justify-center rounded-full text-muted transition-colors hover:bg-accent/12 hover:text-ink" aria-label="Columns">
                       <Columns3 className="h-3.5 w-3.5" />
@@ -740,16 +685,16 @@ export default function MainWindow() {
                       </span>
                       <span className="block text-11 text-muted">{r.queue} queue</span>
                     </span>
-                    {cw >= 700 && <span className="w-8 text-center text-11 text-muted">{r.id}</span>}
+                    {!extraNarrow && <span className="w-8 text-center text-11 text-muted">{r.id}</span>}
                     <span className="w-20 text-right text-12 text-muted">{r.size}</span>
                     <span className="w-36">{statusCell(r)}</span>
-                    {cw >= 790 && <span className="w-20 text-right text-12 text-muted">{r.eta}</span>}
+                    {!extraNarrow && <span className="w-20 text-right text-12 text-muted">{r.eta}</span>}
                     <span className={cn("w-24 text-right text-12", r.status === "running" ? "font-semibold text-accent" : "text-muted")}>
                       {r.speed}
                     </span>
-                    {cw >= 900 && <span className="w-24 text-right text-12 text-muted">{r.lastTry}</span>}
-                    {cw >= 1010 && <span className="w-24 text-right text-12 text-muted">{r.added}</span>}
-                    {cw >= 1130 && <span className="w-32 truncate text-12 text-muted">{r.saveTo}</span>}
+                    {!narrow && <span className="w-24 text-right text-12 text-muted">{r.lastTry}</span>}
+                    {!narrow && <span className="w-24 text-right text-12 text-muted">{r.added}</span>}
+                    {!narrow && <span className="w-32 truncate text-12 text-muted">{r.saveTo}</span>}
                     <span className="w-6" />
                   </motion.button>
                 ))}
@@ -770,13 +715,13 @@ export default function MainWindow() {
                 <HardDrive className="h-3 w-3" /> D:\\ 412 GB free
               </button>
               <button onClick={a.limiter} className="flex items-center gap-1.5 transition-colors hover:text-accent">
-                <Gauge className="h-3 w-3" /> {limiter ? limitText : "Unlimited"}
+                <Gauge className="h-3 w-3" /> {limiter ? "Limiter 4 MB/s" : "Unlimited"}
               </button>
             </div>
           </div>
 
           {/* right panel */}
-          {showPanel && (
+          {!narrow && (
             <aside className="flex w-64 shrink-0 flex-col gap-2.5 overflow-y-auto border-l border-edge/70 bg-panel/40 p-2.5">
               {/* tree */}
               <div className="rounded-card border border-edge bg-panel p-2">
@@ -792,7 +737,7 @@ export default function MainWindow() {
                   >
                     <FileTypeTile kind={c.kind} size={20} iconSize={11} />
                     <span className="flex-1">{c.label}</span>
-                    <span className="text-11">{catCount(c.key, c.count)}</span>
+                    <span className="text-11">{c.count}</span>
                   </button>
                 ))}
                 <div className="flex items-center px-1 pb-1.5 pt-2.5">
@@ -803,7 +748,7 @@ export default function MainWindow() {
                   <button key={q.name} onClick={a.queues} className="flex w-full items-center gap-2 rounded-ctl px-1.5 py-1 text-left text-12 text-muted transition-colors hover:bg-raised hover:text-ink">
                     <span className={cn("h-1.5 w-1.5 rounded-full", q.active ? "bg-success" : "bg-muted/40")} />
                     <span className="flex-1">{q.name}</span>
-                    <span className="text-11">{nat.native ? "" : q.count}</span>
+                    <span className="text-11">{q.count}</span>
                   </button>
                 ))}
               </div>
@@ -820,8 +765,7 @@ export default function MainWindow() {
                           className="h-6 w-6"
                           aria-label="Pause"
                           onClick={() => {
-                            if (nat.native) nat.send("pause", { ids: [r.id] });
-                            else setStatus([r.id], "paused");
+                            setStatus([r.id], "paused");
                             toast({ title: "Download paused", message: r.name, tone: "muted", icon: <Pause className="h-4 w-4" /> });
                           }}
                         >

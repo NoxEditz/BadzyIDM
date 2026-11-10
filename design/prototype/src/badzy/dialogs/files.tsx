@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 import { WindowFrame } from "../WindowFrame";
 import { FileTypeTile, type FileKind } from "../icons";
 import { Badge, Button, Checkbox, Dropdown, ProgressBar, Radio, Segmented, Switch, TextField } from "../ui";
-import { useApp, useNative, useWindowClose } from "../context";
+import { useApp, useWindowClose } from "../context";
 import { Footer } from "./common";
 
 /* ------------------------------- folder picker ------------------------------- */
@@ -34,7 +34,7 @@ const tree: { name: string; icon: typeof HardDrive; sub: string; children: strin
   { name: "F:\\", icon: Usb, sub: "USB drive · 28 GB free", children: ["Transfer"] },
 ];
 
-function FakeFolderPicker({
+export function FolderPicker({
   initial = "D:\\Movies",
   mode = "folder",
   onPick,
@@ -218,19 +218,12 @@ export function OpenWithDialog({ file = "Interstellar.2014.1080p.BluRay.x264.mkv
 /* -------------------------------- move / rename ------------------------------- */
 
 export function MoveRenameDialog({
-  id,
   name = "Interstellar.2014.1080p.BluRay.x264.mkv",
   folder = "D:\\Movies",
   kind = "video" as FileKind,
-}: {
-  id?: number;
-  name?: string;
-  folder?: string;
-  kind?: FileKind;
 }) {
   const close = useWindowClose();
   const { open } = useApp();
-  const nat = useNative();
   const [n, setN] = useState(name);
   const [f, setF] = useState(folder);
   const [moveNow, setMoveNow] = useState(true);
@@ -259,10 +252,7 @@ export function MoveRenameDialog({
       </div>
       <Footer>
         <Button variant="ghost" className="ml-auto" onClick={() => close()}>Cancel</Button>
-        <Button variant="primary" onClick={() => {
-          if (nat.native && id != null) nat.send("move", { id, dir: f, name: n });
-          close({ title: moveNow ? "File moved" : "Download renamed", message: `${f}\\${n}`, tone: "success" });
-        }}>
+        <Button variant="primary" onClick={() => close({ title: moveNow ? "File moved" : "Download renamed", message: `${f}\\${n}`, tone: "success" })}>
           Apply
         </Button>
       </Footer>
@@ -431,38 +421,4 @@ export function HashesDialog() {
       </Footer>
     </WindowFrame>
   );
-}
-
-function NativeFolderPicker({ initial, onPick }: { initial?: string | undefined; onPick?: ((path: string) => void) | undefined }) {
-  const close = useWindowClose();
-  const nat = useNative();
-  useEffect(() => {
-    const b = ((window as unknown as { __badzy?: Record<string, unknown> }).__badzy ??= {});
-    const prev = b["folder"];
-    b["folder"] = (p: string) => {
-      onPick?.(p);
-      close();
-    };
-    nat.send("pickFolder", { initial });
-    return () => {
-      b["folder"] = prev;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return null;
-}
-
-/** Real Windows folder dialog in the app; the designed picker in the prototype. */
-export function FolderPicker(props: { initial?: string; mode?: "folder" | "file"; onPick?: (path: string) => void }) {
-  const nat = useNative();
-  if (nat.native && props.mode !== "file") return <NativeFolderPicker initial={props.initial} onPick={props.onPick} />;
-  return <FakeFolderPicker {...props} />;
-}
-
-/** Opens the Windows folder dialog (or the designed picker in the prototype). */
-export function useFolderPick() {
-  const { open } = useApp();
-  return {
-    pickFolder: (initial: string, onPick: (p: string) => void) => open(<FolderPicker initial={initial} onPick={onPick} />),
-  };
 }

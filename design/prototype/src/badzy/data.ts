@@ -15,9 +15,6 @@ export interface DownloadRow {
   added: string;
   saveTo: string;
   queue: string;
-  url?: string;
-  path?: string;
-  error?: string | null;
 }
 
 export const downloads: DownloadRow[] = [

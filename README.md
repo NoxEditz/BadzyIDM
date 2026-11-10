@@ -14,18 +14,21 @@ Badzy is a Rust desktop download manager with a Slint UI. It can split supported
 
 Badzy is based on **Ezoo Download** by Ahmed Ezzat. Read `THIRD-PARTY-NOTICES.txt` before redistributing it.
 
-## Status (branch `redesign`)
+## Redesign status (branch `redesign`)
 
-Badzy 2.0 is a Rust engine with a web UI (the Lovable design in `design/prototype`) hosted in WebView2 by `crates/shell`. The old Slint app is in `legacy/` only as a source for porting.
+| Phase | What | State |
+|---|---|---|
+| Repo + CI | `scripts/`, `docs/`, `assets/`; GitHub Actions builds the app, bundled FFmpeg, the Inno installer and the installer preview | Done, runs on every push |
+| Speed | Batched disk writes, HTTP 429/503 back-off, orphan temp-file cleanup | Done, engine tests pass |
+| One logo | The orbit logo everywhere (exe, taskbar, tray, installer) | Done |
+| New main window | Frameless rounded window (also on Windows 10), custom title bar, responsive columns, folding side menu, Active downloads card, crisp SVG icons, own controls | Done, tested on Windows |
+| Add download | Redesigned frameless window from the Lovable prototype | Done |
+| Window frame | White frame flash on focus change removed | Done, needs a check on Windows |
+| What's New | 2.0.0 text rewritten | Done |
+| Other dialogs | Settings, progress, properties, torrent, grabber, scheduler get the same chrome | In progress |
+| Installer | Animated preview (`Badzy-Setup-Preview`) built; a real custom installer is still to decide | Preview only |
 
-| Area | State |
-|---|---|
-| Engine, ffmpeg/yt-dlp/aria2c bundling, installer, auto-update | Done |
-| Frameless rounded windows, drag/resize/min/max, tray icon (closing keeps Badzy running) | Done |
-| Download list, Add URL (probe, folder picker, login), pause/resume/delete, queues, open/move/redownload | Done |
-| Browser extension link + "Download File Info" popup + progress popup window | Done |
-| Settings: folders, limits, connections, limiter, start with Windows | Done |
-| Scheduler, Grabber, Playlist, Torrent windows, clipboard watching, sounds, Arabic/RTL, What's New, update prompt | Not ported yet |
+The design reference is the clickable prototype in `design/prototype/` (see `design/README.md`).
 
 ## Quickest Windows build
 

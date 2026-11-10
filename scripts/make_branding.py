@@ -4,10 +4,10 @@
     python scripts/make_branding.py
 
 Master: assets/branding/badzy-mark.png (the red Badzy mark, transparent).
-Writes:  legacy/app/icon.ico            (16..256, the exe + installer icon)
-         legacy/app/ui/icon.png         (256, used inside the app)
-         legacy/app/ui/icon-window.png  (256, window icon fallback)
-         legacy/app/ui/tray32.rgba      (32x32 raw RGBA, tray icon)
+Writes:  crates/app/icon.ico            (16..256, the exe + installer icon)
+         crates/app/ui/icon.png         (256, used inside the app)
+         crates/app/ui/icon-window.png  (256, window icon fallback)
+         crates/app/ui/tray32.rgba      (32x32 raw RGBA, tray icon)
 The browser extension icons are NOT touched: the add-on is signed by Mozilla
 and any change to its files would invalidate the signature.
 """
@@ -42,14 +42,14 @@ def main() -> None:
     frames = [centered_mark(master, s, p) for s, p in pads.items()]
     biggest = frames[-1]
     biggest.save(
-        ROOT / "legacy/app/icon.ico",
+        ROOT / "crates/app/icon.ico",
         format="ICO",
         sizes=[(s, s) for s in pads],
         append_images=frames[:-1],
     )
-    centered_mark(master, 256, 0.06).save(ROOT / "legacy/app/ui/icon.png")
-    centered_mark(master, 256, 0.06).save(ROOT / "legacy/app/ui/icon-window.png")
-    (ROOT / "legacy/app/ui/tray32.rgba").write_bytes(centered_mark(master, 32, 0.03).tobytes())
+    centered_mark(master, 256, 0.06).save(ROOT / "crates/app/ui/icon.png")
+    centered_mark(master, 256, 0.06).save(ROOT / "crates/app/ui/icon-window.png")
+    (ROOT / "crates/app/ui/tray32.rgba").write_bytes(centered_mark(master, 32, 0.03).tobytes())
     print("icons written")
 
 
