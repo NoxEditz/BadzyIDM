@@ -3068,20 +3068,32 @@ pub(crate) fn open_progress(ui: &Ui, id: u64) {
         // the height it had
         let (w, tall) = (d.as_weak(), Rc::new(Cell::new(0f32)));
         d.on_details_toggled(move || {
-            let (w, tall) = (w.clone(), tall.clone());
-            slint::Timer::single_shot(Duration::from_millis(1), move || {
-                let Some(d) = w.upgrade() else { return };
-                let scale = d.window().scale_factor();
-                let now = d.window().size().to_logical(scale);
-                let height = if d.get_show_details() {
-                    let before = tall.get();
-                    if before > 0.0 { before } else { now.height.max(d.get_content_height()) }
-                } else {
-                    tall.set(now.height);
-                    d.get_content_height()
-                };
-                d.window().set_size(slint::LogicalSize::new(now.width, height.max(120.0)));
-            });
+            // the window's size limits follow the content only after the
+            // next layout, so a too early resize is cut off: ask again a
+            // few times (the last one wins)
+            let (w0, tall0) = (w.clone(), tall.clone());
+            let target = Rc::new(Cell::new(0f32));
+            for (i, ms) in [1u64, 40, 120, 300].into_iter().enumerate() {
+                let (w, tall, target) = (w0.clone(), tall0.clone(), target.clone());
+                slint::Timer::single_shot(Duration::from_millis(ms), move || {
+                    let Some(d) = w.upgrade() else { return };
+                    let scale = d.window().scale_factor();
+                    let now = d.window().size().to_logical(scale);
+                    if i == 0 {
+                        let height = if d.get_show_details() {
+                            let before = tall.get();
+                            if before > 0.0 { before } else { now.height.max(d.get_content_height()) }
+                        } else {
+                            tall.set(now.height);
+                            d.get_content_height()
+                        };
+                        target.set(height.max(120.0));
+                    }
+                    if (now.height - target.get()).abs() > 1.0 {
+                        d.window().set_size(slint::LogicalSize::new(now.width, target.get()));
+                    }
+                });
+            }
         });
     }
     {

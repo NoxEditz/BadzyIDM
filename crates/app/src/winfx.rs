@@ -240,7 +240,17 @@ mod taskbar {
         };
     }
 
+    thread_local! {
+        // what each window shows now: the taskbar is only told about changes
+        static LAST: std::cell::RefCell<std::collections::HashMap<isize, (i32, u64)>> =
+            std::cell::RefCell::new(std::collections::HashMap::new());
+    }
+
     pub fn set(hwnd: isize, state: i32, value: Option<(u64, u64)>) {
+        let shown = (state, value.map_or(0, |(d, t)| d.saturating_mul(1000) / t.max(1)));
+        if LAST.with(|l| l.borrow_mut().insert(hwnd, shown)) == Some(shown) {
+            return;
+        }
         LIST.with(|&p| {
             if p == 0 {
                 return;
@@ -414,8 +424,28 @@ unsafe extern "system" fn no_frame_proc(
     _data: usize,
 ) -> windows_sys::Win32::Foundation::LRESULT {
     use windows_sys::Win32::UI::Shell::DefSubclassProc;
-    use windows_sys::Win32::UI::WindowsAndMessaging::{WM_NCACTIVATE, WM_NCCALCSIZE, WM_NCPAINT};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongPtrW, SetWindowLongPtrW, GWL_STYLE, WM_ERASEBKGND, WM_NCACTIVATE, WM_NCCALCSIZE, WM_NCPAINT,
+        WM_SETTEXT, WS_VISIBLE,
+    };
     match msg {
+        // everything is painted by the renderer: never let Windows wipe the
+        // window with the (white) class brush
+        WM_ERASEBKGND => 1,
+        // a new title (the percent in it changes all the time) makes Windows
+        // repaint the frame white; done while the window is "not visible" it
+        // paints nothing
+        WM_SETTEXT => {
+            let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+            if style & WS_VISIBLE as isize != 0 {
+                SetWindowLongPtrW(hwnd, GWL_STYLE, style & !(WS_VISIBLE as isize));
+                let r = DefSubclassProc(hwnd, msg, wparam, lparam);
+                SetWindowLongPtrW(hwnd, GWL_STYLE, style);
+                r
+            } else {
+                DefSubclassProc(hwnd, msg, wparam, lparam)
+            }
+        }
         // -1: "do not repaint the frame"
         WM_NCACTIVATE => DefSubclassProc(hwnd, msg, wparam, -1),
         WM_NCPAINT => 0,
