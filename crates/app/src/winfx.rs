@@ -449,6 +449,10 @@ unsafe extern "system" fn no_frame_proc(
         // -1: "do not repaint the frame"
         WM_NCACTIVATE => DefSubclassProc(hwnd, msg, wparam, -1),
         WM_NCPAINT => 0,
+        // WM_NCUAHDRAWCAPTION / WM_NCUAHDRAWFRAME (not in the headers): sent when the
+        // title bar is clicked or dragged, they make Windows draw its
+        // own caption with the old white minimize / maximize / close boxes
+        0xAE | 0xAF => 0,
         // the whole window is the client area
         WM_NCCALCSIZE if wparam != 0 => 0,
         _ => DefSubclassProc(hwnd, msg, wparam, lparam),
