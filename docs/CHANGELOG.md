@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.1 build — 2026-11-13
+
+### Desktop app
+- Progress window: no more white flash on every update (Windows no longer erases the window or repaints its frame when the title changes), "Show details" works again after "Hide details", and the taskbar progress is only updated when it changes.
+- Frameless windows swallow the caption/frame draw messages, so clicking or dragging the title bar no longer shows the old white minimize / maximize / close boxes.
+- A download hidden to the tray shows the Badzy logo with a progress bar (it was a blue "E").
+
+### Browser extension 2.1.0
+- Arabic and English (popup, settings and right-click menu), right-to-left layout in Arabic.
+- Per-site switch in the popup and a list of sites to leave alone (no downloads taken, no video button).
+- Extra file types to take on top of the app's list.
+- Green tick / red "!" on the toolbar icon after a link is sent.
+- Right-click menu: new "Download playlist / channel" entry; every entry can be switched off.
+- Keyboard shortcuts: open Badzy, video panel, all links, pause / resume.
+- Settings page rebuilt: connection test with the app version, export / import / reset of the settings.
+
+### Docs
+- README rewritten in Arabic with the features, install steps for the app and the extension, what the app connects to, and how to build.
+
 ## 2.0.0 — 2026-11-03
 
 ### Desktop app
