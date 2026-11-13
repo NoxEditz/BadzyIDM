@@ -14,6 +14,10 @@ name: Build Badzy
 
 on:
   push:
+    # a release (or tag) made by hand in GitHub must not start a build: the
+    # builds that publish releases are the [release] / [prerelease vX] commits
+    tags-ignore:
+      - "**"
     paths-ignore:
       - "**.md"
       - "docs/**"
