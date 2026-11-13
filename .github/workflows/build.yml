@@ -6,6 +6,12 @@ name: Build Badzy
 # copies of the program read version.json of the latest release
 # (Help > Check for updates, or by themselves when they start).
 
+# Speed: the Rust build is nearly all of the time. Ordinary pushes use the
+# quick "ci" profile (Cargo.toml: same code, less optimisation, a few minutes).
+# The full release profile (slow, smallest and fastest exe) is used for:
+# main, a commit message with [release], [prerelease vX] or [full], and a
+# manual run with "full" ticked.
+
 on:
   push:
     paths-ignore:
@@ -13,6 +19,11 @@ on:
       - "docs/**"
       - "assets/**"
   workflow_dispatch:
+    inputs:
+      full:
+        description: "Full release optimisation (slower build)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -82,8 +93,17 @@ jobs:
           node extension/test/yt-core.test.js
           node extension/test/i18n.test.js
           node extension/test/background.sim.js
-      - name: Build release
-        run: cargo build --release
+      - name: Pick the build profile
+        shell: pwsh
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          $full = ("${{ github.ref }}" -eq "refs/heads/main") -or ("${{ inputs.full }}" -eq "true") -or ($env:COMMIT_MESSAGE -match '\[(release|full)\]|\[prerelease v')
+          $profile = if ($full) { "release" } else { "ci" }
+          Write-Host "Build profile: $profile"
+          "PROFILE=$profile" | Out-File -Append $env:GITHUB_ENV
+      - name: Build
+        run: cargo build --profile $env:PROFILE
       - name: Get ffmpeg from the ffmpeg job
         uses: actions/download-artifact@v4
         continue-on-error: true
@@ -150,7 +170,7 @@ jobs:
           # everything for the setup is gathered here; the result is the setup only
           $p = "build-cache/stage"
           New-Item -ItemType Directory -Force "$p/tools", "dist" | Out-Null
-          Copy-Item target/release/Badzy.exe $p
+          Copy-Item "target/$env:PROFILE/Badzy.exe" $p
           Copy-Item THIRD-PARTY-NOTICES.txt $p
           Copy-Item -Recurse extension "$p/extension"
           Copy-Item -Recurse extension "$p/extension-firefox"
@@ -186,7 +206,7 @@ jobs:
           # the signature the program checks before it installs an update
           $sig = ""
           if ($env:UPDATE_SIGNING_KEY) {
-            $sig = (cargo run --quiet --release -p swiftget-engine --example sign_update -- $version $hash).Trim()
+            $sig = (cargo run --quiet --profile $env:PROFILE -p swiftget-engine --example sign_update -- $version $hash).Trim()
             if ($LASTEXITCODE -ne 0 -or $sig.Length -ne 128) { throw "could not sign the release" }
           } elseif ($env:IS_RELEASE -eq "true") {
             throw "UPDATE_SIGNING_KEY is not set: installed copies would refuse this update"
