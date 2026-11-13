@@ -81,6 +81,14 @@ fn place_now(w: &slint::Window, maximizable: bool) -> bool {
     let placed = w.with_winit_window(|win: &winit::window::Window| place_winit(win, maximizable)).is_some();
     if placed {
         apply_icons(w);
+        // the thin coloured border is drawn by the window itself (follows the theme)
+        round_corners(w, None);
+        // windows without the Windows frame get rounded corners on every Windows
+        let frameless = w.with_winit_window(|win: &winit::window::Window| !win.is_decorated()).unwrap_or(false);
+        if frameless {
+            hide_frame(w);
+            round_shape(w, 20.0, true);
+        }
     }
     placed
 }
@@ -232,7 +240,17 @@ mod taskbar {
         };
     }
 
+    thread_local! {
+        // what each window shows now: the taskbar is only told about changes
+        static LAST: std::cell::RefCell<std::collections::HashMap<isize, (i32, u64)>> =
+            std::cell::RefCell::new(std::collections::HashMap::new());
+    }
+
     pub fn set(hwnd: isize, state: i32, value: Option<(u64, u64)>) {
+        let shown = (state, value.map_or(0, |(d, t)| d.saturating_mul(1000) / t.max(1)));
+        if LAST.with(|l| l.borrow_mut().insert(hwnd, shown)) == Some(shown) {
+            return;
+        }
         LIST.with(|&p| {
             if p == 0 {
                 return;
@@ -350,6 +368,132 @@ pub(crate) fn drag_resize_window(w: &slint::Window) {
         let _ = win.drag_resize_window(winit::window::ResizeDirection::SouthEast);
     });
 }
+
+/// Resize from an edge or corner: 0 N, 1 S, 2 E, 3 W, 4 NE, 5 NW, 6 SE, 7 SW.
+#[cfg(windows)]
+pub(crate) fn resize_edge(w: &slint::Window, dir: i32) {
+    use slint::winit_030::{winit, WinitWindowAccessor};
+    use winit::window::ResizeDirection as D;
+    let d = match dir {
+        0 => D::North,
+        1 => D::South,
+        2 => D::East,
+        3 => D::West,
+        4 => D::NorthEast,
+        5 => D::NorthWest,
+        6 => D::SouthEast,
+        _ => D::SouthWest,
+    };
+    w.with_winit_window(|win: &winit::window::Window| {
+        let _ = win.drag_resize_window(d);
+    });
+}
+
+#[cfg(not(windows))]
+pub(crate) fn resize_edge(_w: &slint::Window, _dir: i32) {}
+
+/// Rounded corners and a thin accent border around the window (Windows 11;
+/// older Windows ignores both and keeps square corners).
+#[cfg(windows)]
+pub(crate) fn round_corners(w: &slint::Window, border: Option<u32>) {
+    use windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute;
+    let Some(hwnd) = hwnd_of(w) else { return };
+    const DWMWA_WINDOW_CORNER_PREFERENCE: u32 = 33;
+    const DWMWA_BORDER_COLOR: u32 = 34;
+    const DWMWCP_ROUND: i32 = 2;
+    // SAFETY: plain DWM calls with a pointer to a local value of the size given.
+    unsafe {
+        let pref = DWMWCP_ROUND;
+        DwmSetWindowAttribute(hwnd as _, DWMWA_WINDOW_CORNER_PREFERENCE, &pref as *const i32 as *const _, 4);
+        if let Some(rgb) = border {
+            // COLORREF is 0x00BBGGRR
+            DwmSetWindowAttribute(hwnd as _, DWMWA_BORDER_COLOR, &rgb as *const u32 as *const _, 4);
+        }
+    }
+}
+
+/// Frameless windows must never show the Windows frame: without this the
+/// white title bar flashes when the window loses or gets the focus.
+#[cfg(windows)]
+unsafe extern "system" fn no_frame_proc(
+    hwnd: windows_sys::Win32::Foundation::HWND,
+    msg: u32,
+    wparam: windows_sys::Win32::Foundation::WPARAM,
+    lparam: windows_sys::Win32::Foundation::LPARAM,
+    _id: usize,
+    _data: usize,
+) -> windows_sys::Win32::Foundation::LRESULT {
+    use windows_sys::Win32::UI::Shell::DefSubclassProc;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongPtrW, SetWindowLongPtrW, GWL_STYLE, WM_ERASEBKGND, WM_NCACTIVATE, WM_NCCALCSIZE, WM_NCPAINT,
+        WM_SETTEXT, WS_VISIBLE,
+    };
+    match msg {
+        // everything is painted by the renderer: never let Windows wipe the
+        // window with the (white) class brush
+        WM_ERASEBKGND => 1,
+        // a new title (the percent in it changes all the time) makes Windows
+        // repaint the frame white; done while the window is "not visible" it
+        // paints nothing
+        WM_SETTEXT => {
+            let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+            if style & WS_VISIBLE as isize != 0 {
+                SetWindowLongPtrW(hwnd, GWL_STYLE, style & !(WS_VISIBLE as isize));
+                let r = DefSubclassProc(hwnd, msg, wparam, lparam);
+                SetWindowLongPtrW(hwnd, GWL_STYLE, style);
+                r
+            } else {
+                DefSubclassProc(hwnd, msg, wparam, lparam)
+            }
+        }
+        // -1: "do not repaint the frame"
+        WM_NCACTIVATE => DefSubclassProc(hwnd, msg, wparam, -1),
+        WM_NCPAINT => 0,
+        // WM_NCUAHDRAWCAPTION / WM_NCUAHDRAWFRAME (not in the headers): sent when the
+        // title bar is clicked or dragged, they make Windows draw its
+        // own caption with the old white minimize / maximize / close boxes
+        0xAE | 0xAF => 0,
+        // the whole window is the client area
+        WM_NCCALCSIZE if wparam != 0 => 0,
+        _ => DefSubclassProc(hwnd, msg, wparam, lparam),
+    }
+}
+
+#[cfg(windows)]
+pub(crate) fn hide_frame(w: &slint::Window) {
+    use windows_sys::Win32::UI::Shell::SetWindowSubclass;
+    let Some(hwnd) = hwnd_of(w) else { return };
+    // SAFETY: the procedure lives for the whole program; the window is ours.
+    unsafe {
+        SetWindowSubclass(hwnd as _, Some(no_frame_proc), 0xBAD2, 0);
+    }
+}
+
+/// The window's shape cut as a rounded rectangle: works on Windows 10 too
+/// (where DWM does not round windows). `round = false` gives the full
+/// rectangle back (maximized).
+#[cfg(windows)]
+pub(crate) fn round_shape(w: &slint::Window, radius: f32, round: bool) {
+    use windows_sys::Win32::Graphics::Gdi::{CreateRoundRectRgn, SetWindowRgn};
+    let Some(hwnd) = hwnd_of(w) else { return };
+    // SAFETY: plain GDI calls; Windows owns the region after SetWindowRgn.
+    unsafe {
+        if !round {
+            SetWindowRgn(hwnd as _, std::ptr::null_mut(), 1);
+            return;
+        }
+        let s = w.size();
+        let r = (radius * w.scale_factor()) as i32;
+        let rgn = CreateRoundRectRgn(0, 0, s.width as i32 + 1, s.height as i32 + 1, r * 2, r * 2);
+        SetWindowRgn(hwnd as _, rgn, 1);
+    }
+}
+
+#[cfg(not(windows))]
+pub(crate) fn round_shape(_w: &slint::Window, _radius: f32, _round: bool) {}
+
+#[cfg(not(windows))]
+pub(crate) fn round_corners(_w: &slint::Window, _border: Option<u32>) {}
 
 #[cfg(not(windows))]
 pub(crate) fn drag_window(_w: &slint::Window) {}

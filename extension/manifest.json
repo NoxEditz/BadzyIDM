@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Badzy",
-  "version": "2.0.0",
-  "description": "Badzy extension.",
+  "version": "2.1.0",
+  "description": "Send downloads and videos from your browser to Badzy: multi-connection speed, resume, video qualities, playlists and magnet links.",
   "permissions": [
     "downloads",
     "cookies",
@@ -29,6 +29,32 @@
   "options_ui": {
     "page": "options.html",
     "open_in_tab": false
+  },
+  "commands": {
+    "open-badzy": {
+      "suggested_key": {
+        "default": "Alt+Shift+B"
+      },
+      "description": "Open Badzy"
+    },
+    "open-video-panel": {
+      "suggested_key": {
+        "default": "Alt+Shift+V"
+      },
+      "description": "Open the video download panel of the page"
+    },
+    "download-all-links": {
+      "suggested_key": {
+        "default": "Alt+Shift+L"
+      },
+      "description": "Send all links of the page to Badzy"
+    },
+    "toggle-badzy": {
+      "suggested_key": {
+        "default": "Alt+Shift+P"
+      },
+      "description": "Pause / resume Badzy"
+    }
   },
   "icons": {
     "16": "icons/icon16.png",

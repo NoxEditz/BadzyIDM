@@ -78,7 +78,9 @@ jobs:
           node --check extension/background.js
           node --check extension/popup.js
           node --check extension/options.js
+          node --check extension/i18n.js
           node extension/test/yt-core.test.js
+          node extension/test/i18n.test.js
           node extension/test/background.sim.js
       - name: Build release
         run: cargo build --release
@@ -217,6 +219,27 @@ jobs:
         with:
           name: Badzy-windows
           path: Badzy-windows.zip
+      # A pre-release from any branch: put "[prerelease v0.1]" in the commit
+      # message. The setup is attached as "Badzy v0.1.exe". It is marked
+      # pre-release, so it never becomes the "latest" release that installed
+      # copies read their updates from, and no other release is touched.
+      - name: Publish pre-release
+        if: contains(github.event.head_commit.message, '[prerelease v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          $m = [regex]::Match($env:COMMIT_MESSAGE, '\[prerelease (v[0-9][0-9A-Za-z.\-]*)\]')
+          if (-not $m.Success) { throw "no version in the [prerelease ...] tag" }
+          $tag = $m.Groups[1].Value
+          gh release view $tag --repo "${{ github.repository }}" *> $null
+          if ($LASTEXITCODE -eq 0) { Write-Host "$tag is already released"; exit 0 }
+          $file = "dist/Badzy $tag.exe"
+          Copy-Item dist/Badzy-Setup.exe $file
+          $notes = "Badzy $tag (build of $($env:GITHUB_REF_NAME)). Run the setup; it installs Badzy with ffmpeg, yt-dlp, aria2c and the browser extensions (Chrome / Edge folder ``extension``, Firefox folder ``extension-firefox``)."
+          gh release create $tag $file --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "Badzy $tag" --notes $notes --prerelease
+          if ($LASTEXITCODE -ne 0) { throw "could not create the pre-release" }
       # a release is published only when the commit message says [release]
       # (tag v<version> is created here); the same version again is skipped
       - name: Publish release

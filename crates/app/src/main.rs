@@ -148,6 +148,11 @@ pub(crate) struct Ui {
     updater: Weak<UpdateDialog>,
     /// the download list's columns (order + widths) as the header shows them
     columns_model: Rc<VecModel<ColDef>>,
+    /// the columns as shown now (some hidden / the name stretched to the list's width)
+    view_cols: Rc<VecModel<ColDef>>,
+    list_w: Rc<std::cell::Cell<f32>>,
+    /// the running downloads (side card)
+    active: Rc<VecModel<DownloadRow>>,
     browser_list: Rc<RefCell<Vec<browser::Browser>>>,
 }
 
@@ -301,10 +306,14 @@ fn main() -> anyhow::Result<()> {
         browsers: browsers_dlg.as_weak(),
         updater: updater_dlg.as_weak(),
         columns_model: Rc::new(VecModel::default()),
+        view_cols: Rc::new(VecModel::default()),
+        list_w: Rc::new(std::cell::Cell::new(900.0)),
+        active: Rc::new(VecModel::default()),
         browser_list: Rc::new(RefCell::new(Vec::new())),
     };
     main.set_rows(ModelRc::from(ui.rows.clone()));
-    main.set_columns(ModelRc::from(ui.columns_model.clone()));
+    main.set_columns(ModelRc::from(ui.view_cols.clone()));
+    main.set_active_rows(ModelRc::from(ui.active.clone()));
     main.set_queues(ModelRc::from(ui.queues.clone()));
     main.set_categories(ModelRc::from(ui.cats.clone()));
     // Arabic or English (Options > General > Language, View > Language)
@@ -493,6 +502,49 @@ fn main() -> anyhow::Result<()> {
                 let _ = slint::quit_event_loop();
             }
             slint::CloseRequestResponse::HideWindow
+        });
+    }
+    // its own title bar: drag, minimize, maximize, close, resize from the edges
+    {
+        let w = main.as_weak();
+        main.on_win_drag(move || {
+            if let Some(m) = w.upgrade() {
+                winfx::drag_window(m.window());
+            }
+        });
+        let w = main.as_weak();
+        main.on_win_min(move || {
+            if let Some(m) = w.upgrade() {
+                m.window().set_minimized(true);
+            }
+        });
+        let w = main.as_weak();
+        main.on_win_max(move || {
+            if let Some(m) = w.upgrade() {
+                let now = !m.window().is_maximized();
+                m.window().set_maximized(now);
+                m.set_is_max(now);
+            }
+        });
+        let w = main.as_weak();
+        main.on_win_close(move || {
+            if let Some(m) = w.upgrade() {
+                m.window().dispatch_event(slint::platform::WindowEvent::CloseRequested);
+            }
+        });
+        let w = main.as_weak();
+        main.on_win_resized(move || {
+            if let Some(m) = w.upgrade() {
+                let maxed = m.window().is_maximized();
+                m.set_is_max(maxed);
+                winfx::round_shape(m.window(), 20.0, !maxed);
+            }
+        });
+        let w = main.as_weak();
+        main.on_win_resize(move |dir| {
+            if let Some(m) = w.upgrade() {
+                winfx::resize_edge(m.window(), dir);
+            }
         });
     }
     // after an update: what is new, once, in the language of the program
@@ -819,6 +871,7 @@ fn wire_main(ui: &Ui) {
                 c.width = w.clamp(36.0, 2000.0);
                 ui.columns_model.set_row_data(i as usize, c);
             }
+            relayout_columns(&ui);
         });
     }
     {
@@ -826,16 +879,24 @@ fn wire_main(ui: &Ui) {
         main.on_columns_changed(move || save_columns(&ui));
     }
     {
+        let ui = ui.clone();
+        main.on_list_resized(move |w| {
+            ui.list_w.set(w);
+            relayout_columns(&ui);
+        });
+    }
+    {
         // the header: a title dragged onto another place moves the column there
         let ui = ui.clone();
         main.on_column_dropped(move |from, x| {
-            let widths: Vec<f32> = (0..ui.columns_model.row_count()).filter_map(|i| ui.columns_model.row_data(i)).map(|c| c.width).collect();
+            let widths: Vec<f32> = (0..ui.view_cols.row_count()).filter_map(|i| ui.view_cols.row_data(i)).map(|c| c.width).collect();
             let to = column_at(&widths, x);
             let from = from.max(0) as usize;
             if from < widths.len() && to != from {
                 if let Some(c) = ui.columns_model.row_data(from) {
                     ui.columns_model.remove(from);
                     ui.columns_model.insert(to.min(ui.columns_model.row_count()), c);
+                    relayout_columns(&ui);
                     save_columns(&ui);
                 }
             }
@@ -1236,6 +1297,20 @@ fn wire_add(ui: &Ui) {
     let Some(add) = ui.ctx.add.upgrade() else { return };
     {
         let ctx = ui.ctx.clone();
+        {
+            let w = add.as_weak();
+            add.on_drag(move || {
+                if let Some(a) = w.upgrade() {
+                    winfx::drag_window(a.window());
+                }
+            });
+            let w = add.as_weak();
+            add.on_minimize(move || {
+                if let Some(a) = w.upgrade() {
+                    a.window().set_minimized(true);
+                }
+            });
+        }
         add.on_check_url(move || {
             if let Some(d) = ctx.add.upgrade() {
                 let url = d.get_url().trim().to_string();
@@ -1875,6 +1950,47 @@ pub(crate) fn column_at(widths: &[f32], x: f32) -> usize {
     widths.len().saturating_sub(1)
 }
 
+/// Fit the columns to the list: the name takes what the others leave, and when
+/// the window is narrow the least useful columns step aside (nothing is cut off,
+/// nothing scrolls sideways). Hidden columns get width 0 and come back when
+/// there is room again.
+fn relayout_columns(ui: &Ui) {
+    // icon column + paddings
+    let avail = (ui.list_w.get() - 44.0).max(120.0);
+    let base: Vec<ColDef> = (0..ui.columns_model.row_count()).filter_map(|i| ui.columns_model.row_data(i)).collect();
+    // first to go when space runs out
+    const DROP: [&str; 10] = ["parent", "referer", "saveto", "desc", "added", "last", "q", "eta", "speed", "size"];
+    let mut hidden: Vec<&str> = Vec::new();
+    let mut name_w;
+    loop {
+        let others: f32 = base.iter().filter(|c| c.key != "name" && !hidden.contains(&c.key.as_str())).map(|c| c.width).sum();
+        name_w = avail - others;
+        if name_w >= 190.0 {
+            break;
+        }
+        match DROP.iter().find(|k| !hidden.contains(k) && base.iter().any(|c| c.key.as_str() == **k)) {
+            Some(k) => hidden.push(k),
+            None => break,
+        }
+    }
+    let shown: Vec<ColDef> = base
+        .into_iter()
+        .map(|mut c| {
+            if c.key == "name" {
+                c.width = name_w.max(120.0);
+            } else if hidden.contains(&c.key.as_str()) {
+                c.width = 0.0;
+            }
+            c
+        })
+        .collect();
+    let same = shown.len() == ui.view_cols.row_count()
+        && shown.iter().enumerate().all(|(i, c)| ui.view_cols.row_data(i).map(|o| o.key == c.key && (o.width - c.width).abs() < 0.5).unwrap_or(false));
+    if !same {
+        ui.view_cols.set_vec(shown);
+    }
+}
+
 /// Keep the header's column order and widths in the settings.
 fn save_columns(ui: &Ui) {
     let cols: Vec<ColDef> = (0..ui.columns_model.row_count()).filter_map(|i| ui.columns_model.row_data(i)).collect();
@@ -1905,6 +2021,7 @@ pub(crate) fn apply_view_settings(ui: &Ui, s: &Settings) {
         let defs: Vec<ColDef> =
             s.column_layout().into_iter().map(|(key, w)| ColDef { key: key.into(), width: w as f32 }).collect();
         ui.columns_model.set_vec(defs);
+        relayout_columns(ui);
         m.set_toolbar_small(s.toolbar_small);
     }
 }
@@ -2777,6 +2894,8 @@ pub(crate) fn refresh(ui: &Ui) {
         w.set_can_stop(chosen.iter().any(|v| v.status == Status::Queued || v.status.is_running()));
     }
     update_model(&ui.rows, new_rows);
+    let running: Vec<DownloadRow> = views.iter().map(|v| row_of(v, false)).filter(|r| r.state == 1).take(4).collect();
+    update_model(&ui.active, running);
 
     // sidebar: categories (General last) with their counts
     let count = |f: &dyn Fn(&DownloadView) -> bool| {
@@ -2949,20 +3068,32 @@ pub(crate) fn open_progress(ui: &Ui, id: u64) {
         // the height it had
         let (w, tall) = (d.as_weak(), Rc::new(Cell::new(0f32)));
         d.on_details_toggled(move || {
-            let (w, tall) = (w.clone(), tall.clone());
-            slint::Timer::single_shot(Duration::from_millis(1), move || {
-                let Some(d) = w.upgrade() else { return };
-                let scale = d.window().scale_factor();
-                let now = d.window().size().to_logical(scale);
-                let height = if d.get_show_details() {
-                    let before = tall.get();
-                    if before > 0.0 { before } else { now.height.max(d.get_content_height()) }
-                } else {
-                    tall.set(now.height);
-                    d.get_content_height()
-                };
-                d.window().set_size(slint::LogicalSize::new(now.width, height.max(120.0)));
-            });
+            // the window's size limits follow the content only after the
+            // next layout, so a too early resize is cut off: ask again a
+            // few times (the last one wins)
+            let (w0, tall0) = (w.clone(), tall.clone());
+            let target = Rc::new(Cell::new(0f32));
+            for (i, ms) in [1u64, 40, 120, 300].into_iter().enumerate() {
+                let (w, tall, target) = (w0.clone(), tall0.clone(), target.clone());
+                slint::Timer::single_shot(Duration::from_millis(ms), move || {
+                    let Some(d) = w.upgrade() else { return };
+                    let scale = d.window().scale_factor();
+                    let now = d.window().size().to_logical(scale);
+                    if i == 0 {
+                        let height = if d.get_show_details() {
+                            let before = tall.get();
+                            if before > 0.0 { before } else { now.height.max(d.get_content_height()) }
+                        } else {
+                            tall.set(now.height);
+                            d.get_content_height()
+                        };
+                        target.set(height.max(120.0));
+                    }
+                    if (now.height - target.get()).abs() > 1.0 {
+                        d.window().set_size(slint::LogicalSize::new(now.width, target.get()));
+                    }
+                });
+            }
         });
     }
     {

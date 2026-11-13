@@ -1,0 +1,177 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+/*
+ * Badzy design system.
+ * Every screen consumes tokens from here — no hardcoded colors in components.
+ * data-theme on the stage root swaps accent themes (default "red") or light mode.
+ */
+
+@theme inline {
+  --color-window: var(--window);
+  --color-panel: var(--panel);
+  --color-raised: var(--raised);
+  --color-edge: var(--edge);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-on-accent: var(--on-accent);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --color-stage: var(--stage);
+  --color-scrim: var(--scrim);
+
+  --color-t-video: var(--t-video);
+  --color-t-audio: var(--t-audio);
+  --color-t-archive: var(--t-archive);
+  --color-t-program: var(--t-program);
+  --color-t-image: var(--t-image);
+  --color-t-pdf: var(--t-pdf);
+  --color-t-doc: var(--t-doc);
+  --color-t-sheet: var(--t-sheet);
+  --color-t-slides: var(--t-slides);
+  --color-t-torrent: var(--t-torrent);
+  --color-t-disc: var(--t-disc);
+
+  --font-ui: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-wordmark: "Kaushan Script", cursive;
+
+  --text-11: 11px;
+  --text-12: 12px;
+  --text-13: 13px;
+  --text-14: 14px;
+  --text-18: 18px;
+  --text-26: 26px;
+  --text-46: 46px;
+
+  --radius-window: 22px;
+  --radius-card: 16px;
+  --radius-ctl: 11px;
+
+  --shadow-glow: 0 0 22px color-mix(in oklab, var(--accent) 38%, transparent), 0 2px 10px color-mix(in oklab, var(--accent) 22%, transparent);
+  --shadow-raised: 0 10px 26px -14px rgb(0 0 0 / 0.65), 0 1px 0 0 color-mix(in oklab, var(--accent) 14%, transparent) inset;
+  --shadow-window: 0 40px 90px -30px rgb(0 0 0 / 0.8), 0 12px 34px -12px color-mix(in oklab, var(--accent) 14%, transparent);
+  --shadow-pop: 0 16px 44px -12px rgb(0 0 0 / 0.75);
+
+  --animate-shimmer: shimmer 2.2s linear infinite;
+  --animate-pulse-glow: pulse-glow 2.6s ease-in-out infinite;
+  --animate-drift: drift 46s ease-in-out infinite alternate;
+  --animate-spin-slow: spin 1.1s linear infinite;
+}
+
+:root {
+  /* default theme: red (dark) */
+  --window: oklch(0.142 0.013 276.5);
+  --panel: oklch(0.185 0.012 285.2);
+  --raised: oklch(0.221 0.016 285.1);
+  --edge: oklch(0.215 0.048 354);
+  --accent: oklch(0.609 0.242 22.7);
+  --accent-2: oklch(0.678 0.213 15.8);
+  --on-accent: oklch(0.985 0.006 300);
+  --ink: oklch(0.958 0.012 313.2);
+  --muted: oklch(0.697 0.024 305.5);
+  --success: oklch(0.769 0.195 153.6);
+  --warning: oklch(0.707 0.156 67);
+  --error: oklch(0.753 0.155 41.6);
+  --stage: oklch(0.122 0.009 268.1);
+  --scrim: oklch(0.08 0.01 280 / 0.58);
+
+  --t-video: oklch(0.686 0.206 15);
+  --t-audio: oklch(0.666 0.195 304.8);
+  --t-archive: oklch(0.776 0.147 69.1);
+  --t-program: oklch(0.705 0.159 252.4);
+  --t-image: oklch(0.778 0.145 169.7);
+  --t-pdf: oklch(0.753 0.155 41.6);
+  --t-doc: oklch(0.702 0.155 264.5);
+  --t-sheet: oklch(0.769 0.195 153.6);
+  --t-slides: oklch(0.813 0.165 75);
+  --t-torrent: oklch(0.816 0.163 150.7);
+  --t-disc: oklch(0.712 0.034 266.1);
+}
+
+/* accent themes — token swaps only */
+[data-theme="blue"] { --accent: oklch(0.612 0.210 260.7); --accent-2: oklch(0.755 0.126 259.6); --edge: oklch(0.230 0.048 257.9); }
+[data-theme="violet"] { --accent: oklch(0.606 0.219 292.7); --accent-2: oklch(0.754 0.143 295.7); --edge: oklch(0.219 0.062 288.5); }
+[data-theme="green"] { --accent: oklch(0.736 0.175 156.4); --accent-2: oklch(0.834 0.149 160.7); --edge: oklch(0.258 0.043 164.1); }
+[data-theme="orange"] { --accent: oklch(0.724 0.187 48.9); --accent-2: oklch(0.819 0.129 62.5); --edge: oklch(0.249 0.046 48.8); }
+[data-theme="teal"] { --accent: oklch(0.704 0.123 182.5); --accent-2: oklch(0.855 0.125 181.1); --edge: oklch(0.275 0.040 187.2); }
+[data-theme="pink"] { --accent: oklch(0.657 0.241 6.9); --accent-2: oklch(0.781 0.142 357.6); --edge: oklch(0.235 0.060 355.9); }
+[data-theme="mono"] { --accent: oklch(0.889 0.013 271.3); --accent-2: oklch(0.673 0.028 268.7); --edge: oklch(0.30 0.012 271); }
+
+/* full light mode */
+[data-theme="light"] {
+  --window: oklch(0.974 0.005 275);
+  --panel: oklch(1 0 89.9);
+  --raised: oklch(0.950 0.009 279.7);
+  --edge: oklch(0.885 0.015 316);
+  --ink: oklch(0.204 0.012 293);
+  --muted: oklch(0.527 0.025 299.8);
+  --success: oklch(0.642 0.164 153.2);
+  --warning: oklch(0.609 0.136 65.5);
+  --error: oklch(0.658 0.159 40.9);
+  --stage: oklch(0.923 0.007 275);
+  --scrim: oklch(0.25 0.02 290 / 0.32);
+  --shadow-raised: 0 10px 26px -14px rgb(30 20 40 / 0.18);
+  --shadow-window: 0 40px 90px -30px rgb(30 20 40 / 0.35), 0 12px 34px -12px color-mix(in oklab, var(--accent) 14%, transparent);
+  --shadow-pop: 0 16px 44px -12px rgb(30 20 40 / 0.3);
+}
+
+@layer base {
+  * { border-color: var(--color-edge); }
+  body {
+    background-color: var(--color-stage);
+    color: var(--color-ink);
+    font-family: var(--font-ui);
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: color-mix(in oklab, var(--accent) 40%, transparent); }
+  input, button, select, textarea { font-family: inherit; }
+  /* custom thin scrollbars */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--muted) 30%, transparent);
+    border-radius: 99px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: color-mix(in oklab, var(--accent) 55%, transparent); }
+}
+
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+@keyframes pulse-glow {
+  0%, 100% { filter: drop-shadow(0 0 4px color-mix(in oklab, var(--accent) 45%, transparent)); }
+  50% { filter: drop-shadow(0 0 11px color-mix(in oklab, var(--accent) 85%, transparent)); }
+}
+@keyframes drift {
+  0% { transform: translate(-2%, -1%) scale(1); }
+  100% { transform: translate(3%, 2%) scale(1.08); }
+}
+
+@utility label-caps {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+@utility focus-ring {
+  outline: none;
+  &:focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
+    outline-offset: 1px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

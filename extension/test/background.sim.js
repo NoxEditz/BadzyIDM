@@ -2,7 +2,10 @@
 // node extension/test/background.sim.js
 const fs = require("fs"), path = require("path"), vm = require("vm"), assert = require("assert");
 const dir = path.join(__dirname, "..");
-const listeners = {}; const on = (n) => ({ addListener: (f) => (listeners[n] = f) });
+const listeners = {};
+// several listeners of one event (the program adds more than one) all run
+const on = (n) => ({ addListener: (f) => { const prev = listeners[n]; listeners[n] = prev ? (...a) => { prev(...a); return f(...a); } : f; } });
+const menus = []; const badgeTexts = []; const playlists = []; let appCfg = null;
 const session = {}; const localStore = {}; let reloads = 0; let pingExt = null; const sent = []; const tabMsgs = []; let tabUrl = "https://www.youtube.com/watch?v=AAAAAAAAAAA";
 const chrome = {
   storage: {
@@ -18,14 +21,17 @@ const chrome = {
   webRequest: { onHeadersReceived: on("headers"), onBeforeRequest: on("before") },
   tabs: { onUpdated: on("upd"), onRemoved: on("rm"), get: async (id) => ({ id, url: tabUrl }), query: async () => [{ id: 7 }],
           sendMessage: async (id, m) => tabMsgs.push(m) },
-  action: { setBadgeBackgroundColor: () => {}, setBadgeText: async () => {} },
+  action: { setBadgeBackgroundColor: async () => {}, setBadgeText: async (o) => { badgeTexts.push(o.text); } },
+  commands: { onCommand: on("cmd") },
   runtime: { onInstalled: on("inst"), onStartup: on("start"), onMessage: on("msg"), getManifest: () => ({ version: "1.0.4" }), reload: () => { reloads++; } },
-  contextMenus: { removeAll: () => {}, create: () => {}, onClicked: on("ctx") },
+  contextMenus: { removeAll: (cb) => { menus.length = 0; if (cb) cb(); }, create: (o) => { menus.push(o); }, onClicked: on("ctx") },
   cookies: { getAll: async () => [] },
 };
 const ytCalls = []; const browserDl = []; const cancelled = []; const suggested = []; let appDown = false;
 const fetch = async (url, opts = {}) => {
   if (url.endsWith("/ping") && pingExt) return { ok: true, status: 200, json: async () => ({ ext: pingExt }) };
+  if (url.endsWith("/config") && appCfg) return { ok: true, status: 200, json: async () => appCfg };
+  if (url.endsWith("/playlist")) { playlists.push(JSON.parse(opts.body).url); return { ok: true, status: 200 }; }
   if (url.endsWith("/add")) { if (appDown) throw new TypeError("Failed to fetch"); sent.push(JSON.parse(opts.body)); }
   if (url.endsWith("/resolve")) {
     ytCalls.push(JSON.parse(opts.body));
@@ -222,6 +228,63 @@ const tick = () => new Promise((r) => setTimeout(r, 20));
     assert.strictEqual(ytCalls[n].url, dash.resolve);
     assert.strictEqual(ytCalls[n].referer, "https://site.example/watch/1", "the page goes along as referrer");
     console.log("DASH stream: offered, qualities from the app with the page as referrer");
+  }
+  // the user's own options: blocked sites, extra file types, badge, menus, shortcuts
+  {
+    const reset = () => vm.runInContext("appConfig = null; configAt = 0;", ctx);
+    // a site on the user's own list: the browser keeps its downloads
+    localStore.blockedSites = ["blocked.example"];
+    let n = sent.length;
+    await dl({ url: "https://cdn.blocked.example/a.zip" });
+    assert.strictEqual(sent.length, n, "blocked site: left to the browser");
+    await dl({ url: "https://cdn.other.example/a.zip", referrer: "https://www.blocked.example/page" });
+    assert.strictEqual(sent.length, n, "blocked site (the page it came from): left to the browser");
+    await dl({ url: "https://cdn.other.example/b.zip" });
+    assert.strictEqual(sent.length, n + 1, "other sites still go to the app");
+    const cfgBlocked = await new Promise((r) => listeners.msg({ type: "swiftget-config" }, { tab: { id: 7, url: tabUrl } }, r));
+    assert(cfgBlocked.skipSites.includes("blocked.example"), "no video button on a blocked site");
+    localStore.blockedSites = [];
+    // extra file types on top of the app's list
+    appCfg = { captureExts: ["zip"], skipSites: [], skipAddresses: [] }; reset();
+    n = sent.length;
+    await dl({ url: "https://example.com/disk.iso", mime: "text/plain" });
+    assert.strictEqual(sent.length, n, "a type outside the app's list stays in the browser");
+    localStore.extraExts = ["iso"];
+    await dl({ url: "https://example.com/disk2.iso", mime: "text/plain" });
+    assert.strictEqual(sent.length, n + 1, "an extra type of the user is taken");
+    localStore.extraExts = []; appCfg = null; reset();
+    // the tick on the toolbar icon after a send
+    badgeTexts.length = 0;
+    await dl({ url: "https://example.com/tick.zip" });
+    for (let i = 0; i < 5; i++) await tick();
+    assert(badgeTexts.includes("\u2713"), "a tick after sending");
+    badgeTexts.length = 0;
+    localStore.badge = false;
+    await dl({ url: "https://example.com/notick.zip" });
+    for (let i = 0; i < 5; i++) await tick();
+    assert(!badgeTexts.includes("\u2713"), "no tick when the option is off");
+    localStore.badge = true;
+    // the right-click menu follows the options and the language
+    await listeners.inst(); await tick();
+    assert(menus.some((m) => m.id === "swiftget-playlist"), "playlist entry present");
+    assert.strictEqual(menus.find((m) => m.id === "swiftget-link").title, "Download with Badzy");
+    localStore.menus = { playlist: false, all: false };
+    localStore.lang = "ar";
+    listeners.store({ menus: { newValue: localStore.menus } }, "local"); await tick(); await tick();
+    assert(!menus.some((m) => m.id === "swiftget-playlist" || m.id === "swiftget-all"), "entries switched off are gone");
+    assert(menus.some((m) => m.id === "swiftget-link" && /Badzy/.test(m.title) && /[\u0600-\u06FF]/.test(m.title)), "Arabic titles");
+    delete localStore.menus; delete localStore.lang;
+    await listeners.inst(); await tick();
+    // playlist entry sends the link to the app's playlist window
+    listeners.ctx({ menuItemId: "swiftget-playlist", linkUrl: "https://www.youtube.com/playlist?list=PL1" }, { id: 7, url: tabUrl });
+    for (let i = 0; i < 5; i++) await tick();
+    assert.deepStrictEqual(playlists, ["https://www.youtube.com/playlist?list=PL1"]);
+    // shortcuts: pause / resume
+    await listeners.cmd("toggle-badzy"); await tick();
+    assert.strictEqual(localStore.enabled, false, "shortcut pauses");
+    await listeners.cmd("toggle-badzy"); await tick();
+    assert.strictEqual(localStore.enabled, true, "shortcut resumes");
+    console.log("own options: blocked sites, extra types, tick, menu, shortcuts");
   }
   console.log("background simulation: all checks passed");
 })().catch((e) => { console.error(e); process.exit(1); });

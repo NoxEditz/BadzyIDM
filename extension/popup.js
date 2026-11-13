@@ -1,3 +1,5 @@
+const t = (key, vars) => BadzyI18n.t(key, vars);
+
 const fmtSize = (n) => {
   if (!n) return "";
   const u = ["B", "KB", "MB", "GB", "TB"];
@@ -33,8 +35,30 @@ function isWebUrl(value) {
   } catch { return false; }
 }
 
+/** Hostname of a normal web page (null for chrome:// pages, the new-tab page...). */
+function siteOf(url) {
+  try {
+    const u = new URL(url);
+    return /^https?:$/.test(u.protocol) && u.hostname ? u.hostname.replace(/^www\./, "") : null;
+  } catch {
+    return null;
+  }
+}
+
 async function init() {
+  await BadzyI18n.init();
   document.getElementById("settings").addEventListener("click", () => chrome.runtime.openOptionsPage());
+  try {
+    document.getElementById("version").textContent = `Badzy v${chrome.runtime.getManifest().version}`;
+  } catch { /* no manifest in a test page */ }
+  // the language button: the other language's name
+  const langButton = document.getElementById("lang");
+  const showLang = () => { langButton.textContent = BadzyI18n.lang === "ar" ? "EN" : "ع"; };
+  showLang();
+  langButton.addEventListener("click", async () => {
+    await BadzyI18n.set(BadzyI18n.lang === "ar" ? "en" : "ar");
+    location.reload(); // every text of the popup in the new language
+  });
 
   const enabled = document.getElementById("enabled");
   const onText = document.getElementById("onText");
@@ -42,8 +66,8 @@ async function init() {
   const showEnabled = (value) => {
     enabled.checked = value;
     document.body.classList.toggle("off", !value);
-    onText.textContent = value ? "Badzy is on" : "Badzy is paused";
-    onHint.textContent = value ? "Browser downloads and video links go to the app" : "The browser handles downloads normally";
+    onText.textContent = t(value ? "on" : "paused");
+    onHint.textContent = t(value ? "onHint" : "pausedHint");
     document.getElementById("quickUrl").disabled = !value;
     document.getElementById("quickAddButton").disabled = !value;
     document.getElementById("scale").disabled = !value;
@@ -87,27 +111,27 @@ async function init() {
     event.preventDefault();
     const url = input.value.trim();
     if (!isMagnet(url) && !isWebUrl(url)) {
-      setHint("Paste a valid http(s) URL or a magnet link with a BTIH/BTMH hash.", "error");
+      setHint(t("quickBad"), "error");
       input.focus();
       return;
     }
     addButton.disabled = true;
-    addButton.textContent = "Adding…";
-    setHint("Sending to Badzy…");
+    addButton.textContent = t("quickAdding");
+    setHint(t("quickSending"));
     try {
       const result = await sendMessage({ type: "swiftget-quick-add", url });
-      if (!result || !result.ok) throw new Error(result && result.error || "Badzy did not accept the link.");
-      setHint(isMagnet(url) ? "Magnet sent to Badzy ✓ · review files in the Torrent window" : "Download sent to Badzy ✓", "success");
+      if (!result || !result.ok) throw new Error(result && result.error || t("quickRefused"));
+      setHint(t(isMagnet(url) ? "quickSentMagnet" : "quickSent"), "success");
       input.value = "";
       document.getElementById("appCallout").classList.remove("show");
       const status = document.getElementById("status");
       status.classList.add("on");
-      document.getElementById("statusText").textContent = "Connected";
+      document.getElementById("statusText").textContent = t("connected");
     } catch (error) {
-      setHint(error.message || "Could not reach Badzy. Is the desktop app running?", "error");
+      setHint(error.message || t("quickOffline"), "error");
     } finally {
       addButton.disabled = !enabled.checked;
-      addButton.textContent = "Add ↗";
+      addButton.textContent = t("quickAdd");
     }
   });
 
@@ -116,110 +140,134 @@ async function init() {
     const status = document.getElementById("status");
     status.classList.remove("checking");
     status.classList.toggle("on", !!(res && res.ok));
-    document.getElementById("statusText").textContent = res && res.ok ? "Connected" : "App not running";
+    document.getElementById("statusText").textContent = t(res && res.ok ? "connected" : "appOff");
     if (!res || !res.ok) {
       const callout = document.getElementById("appCallout");
-      callout.textContent = "Badzy desktop isn’t running. Start it, then try your download again.";
+      callout.textContent = t("calloutOff");
       callout.classList.add("show");
     }
   } catch {
     const status = document.getElementById("status");
     status.classList.remove("checking");
-    document.getElementById("statusText").textContent = "Unavailable";
+    document.getElementById("statusText").textContent = t("unavailable");
     const callout = document.getElementById("appCallout");
-    callout.textContent = "Can’t reach the desktop app. Start Badzy or check the extension port in Settings.";
+    callout.textContent = t("calloutUnreach");
     callout.classList.add("show");
   }
 
   let tab;
   try { [tab] = await chrome.tabs.query({ active: true, currentWindow: true }); } catch { return; }
   if (!tab) return;
+
+  // "Badzy on this site": off adds the site to the list of sites to leave alone
+  const site = siteOf(tab.url);
+  if (site) {
+    const row = document.getElementById("siteRow");
+    const box = document.getElementById("siteOn");
+    const stored = await chrome.storage.local.get({ blockedSites: [] });
+    let blocked = Array.isArray(stored.blockedSites) ? stored.blockedSites : [];
+    const isBlocked = () => blocked.some((s) => site === s || site.endsWith("." + s));
+    const showSite = () => {
+      box.checked = !isBlocked();
+      document.getElementById("siteText").textContent = t(box.checked ? "siteOn" : "siteOff", { site });
+      document.getElementById("siteHint").textContent = t(box.checked ? "siteOnHint" : "siteOffHint");
+    };
+    row.hidden = false;
+    showSite();
+    box.addEventListener("change", async () => {
+      blocked = blocked.filter((s) => !(site === s || site.endsWith("." + s)));
+      if (!box.checked) blocked.push(site);
+      await chrome.storage.local.set({ blockedSites: blocked });
+      showSite();
+    });
+  }
+
   try {
     const items = await sendMessage({ type: "swiftget-get-media", tabId: tab.id });
     const box = document.getElementById("media");
     const count = document.getElementById("mediaCount");
     if (!Array.isArray(items) || !items.length) {
-      count.textContent = "Nothing found";
+      count.textContent = t("nothing");
       const empty = document.querySelector("#media .empty");
-      if (empty) empty.innerHTML = '<span class="empty-icon" aria-hidden="true">◉</span>No media detected on this page.<br>Try starting playback or opening a media page.';
+      if (empty) empty.innerHTML = '<span class="empty-icon" aria-hidden="true">◉</span>' + t("emptyNone");
       return;
     }
     box.replaceChildren();
     let total = items.length;
-    count.textContent = `${total} found`;
+    count.textContent = t("found", { n: total });
     const title = (tab.title || "video").replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").slice(0, 120);
     if (/youtube\.com/i.test(tab.url || "") && /[?&]list=/.test(tab.url || "")) {
       const row = document.createElement("div"); row.className = "media";
-      const info = document.createElement("div"); info.textContent = "All videos in this playlist";
-      const btn = document.createElement("button"); btn.className = "all"; btn.textContent = "Download all";
+      const info = document.createElement("div"); info.textContent = t("playlistAll");
+      const btn = document.createElement("button"); btn.className = "all"; btn.textContent = t("downloadAll");
       btn.dataset.unavailable = "false"; btn.disabled = !enabled.checked;
       btn.addEventListener("click", async () => {
-        btn.disabled = true; btn.textContent = "Opening…";
+        btn.disabled = true; btn.textContent = t("opening");
         try {
           const result = await sendMessage({ type: "swiftget-playlist", url: tab.url });
-          btn.textContent = result && result.ok ? "Opened ✓" : "Failed";
+          btn.textContent = t(result && result.ok ? "opened" : "failed");
           if (!result || !result.ok) btn.disabled = false;
-        } catch { btn.textContent = "App offline"; btn.disabled = false; }
+        } catch { btn.textContent = t("appOffline"); btn.disabled = false; }
       });
       row.append(info, btn); box.appendChild(row); total++;
     }
     for (const media of items) {
       const row = document.createElement("div"); row.className = "media";
-      const info = document.createElement("div"); info.textContent = media.label || "Media";
+      const info = document.createElement("div"); info.textContent = media.label || t("media");
       const small = document.createElement("small"); small.textContent = media.sub || ""; info.appendChild(small);
-      const btn = document.createElement("button"); btn.textContent = "Download";
+      const btn = document.createElement("button"); btn.textContent = t("download");
       btn.dataset.unavailable = String(!!media.disabled); btn.disabled = !!media.disabled || !enabled.checked;
       btn.addEventListener("click", async () => {
         btn.disabled = true;
-        const oldText = btn.textContent; btn.textContent = media.resolve ? "Finding…" : "Sending…";
+        const oldText = btn.textContent; btn.textContent = media.resolve ? t("finding") : t("sending");
         try {
           let choices = [media];
           if (media.resolve) {
             const resolved = await sendMessage({ type: "swiftget-resolve-video", resolve: media.resolve });
-            if (!resolved || resolved.error || !Array.isArray(resolved.items)) throw new Error(resolved && resolved.error || "Could not find video quality.");
+            if (!resolved || resolved.error || !Array.isArray(resolved.items)) throw new Error(resolved && resolved.error || t("noQuality"));
             choices = resolved.items;
           }
           if (choices.length === 1) {
             const choice = choices[0];
             const res = await sendMessage({ type: "swiftget-download", item: choice, title: tab.title, referrer: tab.url, fileName: `${title}.${choice.ext || "mp4"}` });
-            if (!res || !res.ok) throw new Error(res && res.error || "Could not send download.");
-            btn.textContent = "Sent ✓";
+            if (!res || !res.ok) throw new Error(res && res.error || t("noSend"));
+            btn.textContent = t("sent");
           } else {
             // Keep the popup simple: use the best quality by default, while
             // showing the options returned by the app in the next rows.
             const label = document.createElement("small");
-            label.textContent = `${choices.length} qualities available below`;
+            label.textContent = t("qualities", { n: choices.length });
             info.appendChild(label);
             row.replaceWith(...choices.map((choice) => {
               const option = document.createElement("div"); option.className = "media";
-              const name = document.createElement("div"); name.textContent = choice.label || choice.quality || "Media";
-              const send = document.createElement("button"); send.textContent = "Download";
+              const name = document.createElement("div"); name.textContent = choice.label || choice.quality || t("media");
+              const send = document.createElement("button"); send.textContent = t("download");
               send.dataset.unavailable = "false"; send.disabled = !enabled.checked;
               send.addEventListener("click", async () => {
-                send.disabled = true; send.textContent = "Sending…";
+                send.disabled = true; send.textContent = t("sending");
                 try {
                   const result = await sendMessage({ type: "swiftget-download", item: choice, title: tab.title, referrer: tab.url, fileName: `${title}.${choice.ext || "mp4"}` });
-                  if (!result || !result.ok) throw new Error(result && result.error || "Could not send download.");
-                  send.textContent = "Sent ✓";
-                } catch { send.textContent = "Retry"; send.disabled = false; }
+                  if (!result || !result.ok) throw new Error(result && result.error || t("noSend"));
+                  send.textContent = t("sent");
+                } catch { send.textContent = t("retry"); send.disabled = false; }
               });
               option.append(name, send); return option;
             }));
           }
         } catch (error) {
-          btn.textContent = "Retry"; btn.disabled = false;
-          const small = info.querySelector("small"); if (small) small.textContent = error.message || "Could not send download.";
+          btn.textContent = t("retry"); btn.disabled = false;
+          const small = info.querySelector("small"); if (small) small.textContent = error.message || t("noSend");
         }
       });
       row.append(info, btn); box.appendChild(row);
     }
-    count.textContent = `${total} found`;
+    count.textContent = t("found", { n: total });
   } catch {
-    document.getElementById("mediaCount").textContent = "Media scan unavailable";
+    document.getElementById("mediaCount").textContent = t("scanFail");
   }
 }
 
 init().catch((error) => {
   console.error("Badzy popup:", error);
-  setHint("The popup hit an error. Reopen it or reload the extension.", "error");
+  setHint(t("popupError"), "error");
 });

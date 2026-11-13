@@ -22,48 +22,26 @@ pub enum DownloadAction {
     Pause,
 }
 
-/// 32 x 32 RGBA picture for a hidden download: a blue "E" with a green
-/// bar under it showing how far it is (`None`: size unknown, no bar).
+/// 32 x 32 RGBA picture for a hidden download: the Badzy logo with a green
+/// bar along the bottom showing how far it is (`None`: size unknown, no bar).
 #[cfg_attr(not(windows), allow(dead_code))]
 pub fn download_icon(progress: Option<f32>) -> Vec<u8> {
     const N: usize = 32;
-    let mut px = vec![0u8; N * N * 4];
-    let mut put = |x: usize, y: usize, c: [u8; 4]| {
-        let i = (y * N + x) * 4;
-        px[i..i + 4].copy_from_slice(&c);
-    };
-    let blue = [0x1f, 0x6f, 0xeb, 0xff];
-    let white = [0xff, 0xff, 0xff, 0xff];
-    for y in 0..N {
-        for x in 0..N {
-            // a square with round corners (radius 6)
-            let (dx, dy) = (x.min(N - 1 - x), y.min(N - 1 - y));
-            let corner = dx < 6 && dy < 6 && {
-                let (cx, cy) = (6.0 - dx as f32 - 0.5, 6.0 - dy as f32 - 0.5);
-                cx * cx + cy * cy > 36.0
-            };
-            if !corner {
-                put(x, y, blue);
-            }
-        }
-    }
-    let rect = |put: &mut dyn FnMut(usize, usize, [u8; 4]), x0: usize, y0: usize, x1: usize, y1: usize, c: [u8; 4]| {
+    let mut px = include_bytes!("../ui/tray32.rgba").to_vec();
+    debug_assert_eq!(px.len(), N * N * 4);
+    let mut rect = |x0: usize, y0: usize, x1: usize, y1: usize, c: [u8; 4]| {
         for y in y0..y1 {
             for x in x0..x1 {
-                put(x, y, c);
+                let i = (y * N + x) * 4;
+                px[i..i + 4].copy_from_slice(&c);
             }
         }
     };
-    // the letter
-    rect(&mut put, 9, 4, 13, 22, white);
-    rect(&mut put, 9, 4, 23, 8, white);
-    rect(&mut put, 9, 11, 21, 15, white);
-    rect(&mut put, 9, 18, 23, 22, white);
     if let Some(p) = progress {
         let p = p.clamp(0.0, 1.0);
-        rect(&mut put, 3, 24, 29, 30, [0x0b, 0x2a, 0x5c, 0xff]);
-        let end = 4 + ((24.0 * p).round() as usize);
-        rect(&mut put, 4, 25, end, 29, [0x3d, 0xdc, 0x5b, 0xff]);
+        rect(2, 26, 30, 31, [0x0b, 0x12, 0x20, 0xff]);
+        let end = 3 + ((26.0 * p).round() as usize);
+        rect(3, 27, end, 30, [0x3d, 0xdc, 0x5b, 0xff]);
     }
     px
 }
@@ -309,11 +287,13 @@ mod tests {
         let empty = download_icon(Some(0.0));
         let half = download_icon(Some(0.5));
         assert_eq!(empty.len(), 32 * 32 * 4);
-        let green = |px: &[u8], x: usize| px[(27 * 32 + x) * 4 + 1] == 0xdc;
-        assert!(!green(&empty, 10) && green(&half, 10) && !green(&half, 26));
-        // corners are see-through, the letter is white
-        assert_eq!(half[3], 0);
-        assert_eq!(&half[(5 * 32 + 10) * 4..(5 * 32 + 10) * 4 + 4], &[255, 255, 255, 255]);
+        let green = |px: &[u8], x: usize| px[(28 * 32 + x) * 4 + 1] == 0xdc;
+        assert!(!green(&empty, 10) && green(&half, 10) && !green(&half, 28));
+        // it is the logo: the same picture as the main tray icon above the bar
+        let logo = include_bytes!("../ui/tray32.rgba");
+        assert_eq!(&half[..26 * 32 * 4], &logo[..26 * 32 * 4]);
+        // no bar when the size is unknown
+        assert_eq!(download_icon(None), logo.to_vec());
         assert_eq!(short_tip(&"x".repeat(300)).chars().count(), 120);
         assert_eq!(step_of(0.5), 12);
     }

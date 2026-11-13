@@ -15,10 +15,22 @@ if (typeof importScripts === "function") importScripts("yt-core.js");
 
 // enabled: the on / off switch of the add-in's window (off = the browser
 // keeps its downloads and no buttons are shown on videos)
-const DEFAULTS = { port: 9614, intercept: true, minSizeKB: 0, enabled: true };
+// blockedSites: sites Badzy leaves alone (own list, on top of the app's)
+// extraExts: extra file types to take, on top of the app's Options > File Types
+// badge: a green tick / red "!" on the toolbar icon after sending a link
+// menus: which entries the right-click menu has
+const MENU_DEFAULTS = { link: true, media: true, video: true, all: true, selected: true, playlist: true };
+const DEFAULTS = {
+  port: 9614, intercept: true, minSizeKB: 0, enabled: true,
+  blockedSites: [], extraExts: [], badge: true, menus: MENU_DEFAULTS, lang: null,
+};
 
 async function getOpts() {
-  return Object.assign({}, DEFAULTS, await chrome.storage.local.get(DEFAULTS));
+  const o = Object.assign({}, DEFAULTS, await chrome.storage.local.get(DEFAULTS));
+  o.menus = Object.assign({}, MENU_DEFAULTS, o.menus);
+  if (!Array.isArray(o.blockedSites)) o.blockedSites = [];
+  if (!Array.isArray(o.extraExts)) o.extraExts = [];
+  return o;
 }
 
 function apiUrl(port, path) {
@@ -120,16 +132,55 @@ async function sendToApp({ url, audioUrl, referrer, fileName, headers, sourcePag
     userAgent: navigator.userAgent,
     fileName: fileName || null,
   };
-  const r = await fetchWithTimeout(
-    apiUrl(port, "/add"),
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-SwiftGet": "1" },
-      body: JSON.stringify(body),
-    },
-    3000
-  );
-  if (!r.ok) throw new Error(`Badzy answered HTTP ${r.status}`);
+  let r;
+  try {
+    r = await fetchWithTimeout(
+      apiUrl(port, "/add"),
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-SwiftGet": "1" },
+        body: JSON.stringify(body),
+      },
+      3000
+    );
+  } catch (e) {
+    // a slow answer may still have been taken by the app: no red mark then
+    if (!(e && e.name === "AbortError")) flashBadge(false);
+    throw e;
+  }
+  if (!r.ok) {
+    flashBadge(false);
+    throw new Error(`Badzy answered HTTP ${r.status}`);
+  }
+  flashBadge(true);
+}
+
+/** A green tick (sent) or a red "!" (not sent) on the toolbar icon for a moment. */
+async function flashBadge(ok) {
+  try {
+    if (!(await getOpts()).badge) return;
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || tab.id == null) return;
+    await chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: ok ? "#2ea043" : "#d1242f" });
+    await chrome.action.setBadgeText({ tabId: tab.id, text: ok ? "\u2713" : "!" });
+    setTimeout(() => pushToTab(tab.id).catch(() => {}), 2200);
+  } catch {
+    /* no window / the tab is gone */
+  }
+}
+
+/** Is this address on the user's own "leave these sites alone" list? */
+function siteBlocked(opts, ...urls) {
+  const list = opts.blockedSites || [];
+  if (!list.length) return false;
+  return urls.some((u) => {
+    try {
+      const host = new URL(u).hostname.toLowerCase();
+      return list.some((s) => hostMatches(host, s));
+    } catch {
+      return false;
+    }
+  });
 }
 
 // ---------------------------------------------------------------- app options
@@ -176,7 +227,7 @@ function extensionOf(name) {
 }
 
 /** Should Badzy take this browser download? (Options > File Types rules) */
-function wanted(cfg, url, fileName, mime, keys) {
+function wanted(cfg, url, fileName, mime, keys, extra = []) {
   if (!cfg) return true; // old app: take everything like before
   if (cfg.skipKey && cfg.skipKey !== "none" && keys[cfg.skipKey]) return false;
   if (cfg.forceKey && cfg.forceKey !== "none" && keys[cfg.forceKey]) return true;
@@ -188,8 +239,9 @@ function wanted(cfg, url, fileName, mime, keys) {
   }
   if ((cfg.skipSites || []).some((s) => hostMatches(host, s))) return false;
   if ((cfg.skipAddresses || []).some((a) => wildcard(a, url))) return false;
-  const exts = cfg.captureExts || [];
-  if (!exts.length) return true;
+  // the app's list plus the user's own extra types (a copy: the app's list stays as it is)
+  if (!(cfg.captureExts || []).length) return true;
+  const exts = (cfg.captureExts || []).concat(extra);
   let ext = extensionOf(fileName) || extensionOf(new URL(url).pathname);
   // script addresses (download.php?id=…) say nothing about the file
   if (/^(php\d?|aspx?|jsp|cgi|pl|cfm|do|action|html?)$/.test(ext) && !extensionOf(fileName)) ext = "";
@@ -281,12 +333,13 @@ async function shouldTake(item) {
   if (!opts.enabled || !opts.intercept) return false;
   const url = item.finalUrl || item.url;
   if (!url || !/^https?:/i.test(url)) return false; // blob:, data:, file: stay in the browser
+  if (siteBlocked(opts, url, item.url, item.referrer)) return false; // the user's own list of sites
   if (!isNewDownload(item)) return false;
   if (await takeBypass(url)) return false;
   if (opts.minSizeKB > 0 && item.totalBytes > 0 && item.totalBytes < opts.minSizeKB * 1024) return false;
   if (!(await appAlive())) return false; // app not running: let the browser handle it
   const cfg = await getConfig();
-  if (!wanted(cfg, url, baseName(item.filename), item.mime, currentKeys())) return false;
+  if (!wanted(cfg, url, baseName(item.filename), item.mime, currentKeys(), opts.extraExts)) return false;
   if (await appSaysBrowser([item.url, url])) return false; // the user chose the browser for it
   return true;
 }
@@ -438,7 +491,7 @@ async function pushToTab(tabId) {
   }
   const items = await itemsForTab(tabId);
   const count = items.filter((i) => !i.disabled).length;
-  chrome.action.setBadgeBackgroundColor({ color: "#1f6feb" });
+  chrome.action.setBadgeBackgroundColor({ color: "#e92d45" });
   chrome.action.setBadgeText({ tabId, text: count ? String(count) : "" }).catch(() => {});
   chrome.tabs.sendMessage(tabId, { type: "swiftget-media", items }).catch(() => {});
 }
@@ -735,33 +788,49 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 
 // ---------------------------------------------------------------- 4. context menu
 
-function makeMenus() {
+const MENU_TITLES = {
+  en: {
+    link: "Download with Badzy",
+    media: "Download this media with Badzy",
+    video: "Download video with Badzy",
+    all: "Download all links with Badzy",
+    selected: "Download selected links with Badzy",
+    playlist: "Download playlist / channel with Badzy",
+  },
+  ar: {
+    link: "تحميل بواسطة Badzy",
+    media: "تحميل هذا الملف بواسطة Badzy",
+    video: "تحميل الفيديو بواسطة Badzy",
+    all: "تحميل كل الروابط بواسطة Badzy",
+    selected: "تحميل الروابط المحددة بواسطة Badzy",
+    playlist: "تحميل قائمة التشغيل / القناة بواسطة Badzy",
+  },
+};
+
+async function makeMenus() {
+  const o = await getOpts();
+  const browserLang = ((typeof navigator !== "undefined" && navigator.language) || "en").toLowerCase();
+  const T = MENU_TITLES[o.lang || (browserLang.startsWith("ar") ? "ar" : "en")] || MENU_TITLES.en;
+  const entries = [
+    ["link", { id: "swiftget-link", contexts: ["link"] }],
+    ["media", { id: "swiftget-media", contexts: ["video", "audio", "image"] }],
+    ["video", { id: "swiftget-video", contexts: ["page", "video", "frame"] }],
+    ["all", { id: "swiftget-all", contexts: ["page", "frame", "link", "image"] }],
+    ["selected", { id: "swiftget-selected", contexts: ["selection"] }],
+    ["playlist", { id: "swiftget-playlist", contexts: ["link", "page"] }],
+  ];
   chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({ id: "swiftget-link", title: "Download with Badzy", contexts: ["link"] });
-    chrome.contextMenus.create({
-      id: "swiftget-media",
-      title: "Download this media with Badzy",
-      contexts: ["video", "audio", "image"],
-    });
-    chrome.contextMenus.create({
-      id: "swiftget-video",
-      title: "Download video with Badzy",
-      contexts: ["page", "video", "frame"],
-    });
-    chrome.contextMenus.create({
-      id: "swiftget-all",
-      title: "Download all links with Badzy",
-      contexts: ["page", "frame", "link", "image"],
-    });
-    chrome.contextMenus.create({
-      id: "swiftget-selected",
-      title: "Download selected links with Badzy",
-      contexts: ["selection"],
-    });
+    for (const [key, def] of entries) {
+      if (o.menus[key]) chrome.contextMenus.create({ ...def, title: T[key] });
+    }
   });
 }
 chrome.runtime.onInstalled.addListener(makeMenus);
 chrome.runtime.onStartup.addListener(makeMenus);
+// the menu follows the options page at once
+chrome.storage.onChanged.addListener((ch, area) => {
+  if (area === "local" && (ch.menus || ch.lang)) makeMenus();
+});
 
 /** Every link of the page (or of the selection) to the app's "Download all links". */
 async function sendAllLinks(tab, selection) {
@@ -787,6 +856,12 @@ async function sendAllLinks(tab, selection) {
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === "swiftget-all" || info.menuItemId === "swiftget-selected") {
     if (tab) sendAllLinks(tab, info.menuItemId === "swiftget-selected").catch((e) => console.warn("Badzy:", e));
+    return;
+  }
+  if (info.menuItemId === "swiftget-playlist") {
+    // a playlist, channel or a link to one: the app's playlist window
+    const url = info.linkUrl || info.pageUrl;
+    sendPlaylist(url).catch((e) => console.warn("Badzy:", e));
     return;
   }
   if (info.menuItemId === "swiftget-video") {
@@ -878,16 +953,55 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case "swiftget-status":
       appAlive().then((ok) => sendResponse({ ok }));
       return true;
+    case "swiftget-info":
+      // the options page's "test the connection": is the app there, which version
+      getOpts()
+        .then(async ({ port }) => {
+          const r = await fetchWithTimeout(apiUrl(port, "/ping"), { headers: { "X-SwiftGet": "1" } }, 1200);
+          const j = r.ok && typeof r.json === "function" ? await r.json() : {};
+          sendResponse({ ok: !!r.ok, version: j.version || "", ext: j.ext || "" });
+        })
+        .catch(() => sendResponse({ ok: false }));
+      return true;
     case "swiftget-keys":
       lastKeys = { alt: !!msg.alt, ctrl: !!msg.ctrl, shift: !!msg.shift, at: Date.now() };
       return false;
     case "swiftget-config":
       Promise.all([getConfig(), getOpts()]).then(([cfg, o]) => {
         const panel = (cfg && cfg.panel) || { enabled: true, skipSites: [] };
-        sendResponse(o.enabled ? panel : { ...panel, enabled: false });
+        // the user's own list of sites has no video button either
+        const merged = { ...panel, skipSites: (panel.skipSites || []).concat(o.blockedSites) };
+        sendResponse(o.enabled ? merged : { ...merged, enabled: false });
       });
       return true;
     default:
       return false;
   }
 });
+
+// ---------------------------------------------------------------- keyboard shortcuts
+// (Chrome: chrome://extensions/shortcuts, Firefox: Add-ons > gear > Manage Extension Shortcuts)
+if (chrome.commands && chrome.commands.onCommand) {
+  chrome.commands.onCommand.addListener(async (command) => {
+    const o = await getOpts();
+    if (command === "toggle-badzy") {
+      await chrome.storage.local.set({ enabled: !o.enabled });
+      return;
+    }
+    if (!o.enabled) return;
+    if (command === "open-badzy") {
+      fetchWithTimeout(apiUrl(o.port, "/show"), { method: "POST", headers: { "X-SwiftGet": "1" } }, 2000).catch(() => {});
+      return;
+    }
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) return;
+    if (command === "open-video-panel") {
+      if (isYoutube(tab.url)) resolveYoutube(tab.id, tab.url);
+      else resolvePage(tab.id, tab.url);
+      chrome.tabs.sendMessage(tab.id, { type: "swiftget-open-panel" }).catch(() => {});
+      pushToTab(tab.id);
+    } else if (command === "download-all-links") {
+      sendAllLinks(tab, false).catch((e) => console.warn("Badzy:", e));
+    }
+  });
+}
