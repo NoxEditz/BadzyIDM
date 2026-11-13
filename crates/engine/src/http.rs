@@ -6,7 +6,7 @@ use crate::model::{DownloadKind, ProbeResult, RequestHeaders};
 use anyhow::{bail, Context};
 use reqwest::header::{
     ACCEPT, ACCEPT_ENCODING, ACCEPT_RANGES, CONTENT_DISPOSITION, CONTENT_RANGE, CONTENT_TYPE,
-    COOKIE, RANGE, REFERER, USER_AGENT,
+    COOKIE, ETAG, RANGE, REFERER, USER_AGENT,
 };
 use reqwest::{Client, RequestBuilder, StatusCode};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -95,6 +95,31 @@ pub fn reconnect_delay(n: u32) -> Duration {
         4 => 8,
         _ => 10,
     })
+}
+
+
+/// Whether a partial HTTP file must be discarded before resuming.
+///
+/// A strong ETag is the best byte-for-byte validator. If either response lacks
+/// one (or only supplies a weak ETag), fall back to Last-Modified when both
+/// timestamps are available. Missing validators do not by themselves imply a
+/// change; there is no safe evidence either way.
+pub fn remote_file_changed(
+    old_etag: Option<&str>,
+    old_last_modified: Option<&chrono::DateTime<chrono::Utc>>,
+    new_etag: Option<&str>,
+    new_last_modified: Option<&chrono::DateTime<chrono::Utc>>,
+) -> bool {
+    let strong = |tag: &str| !tag.trim().starts_with("W/");
+    if let (Some(old), Some(new)) = (old_etag, new_etag) {
+        if strong(old) && strong(new) {
+            return old.trim() != new.trim();
+        }
+    }
+    matches!(
+        (old_last_modified, new_last_modified),
+        (Some(old), Some(new)) if old != new
+    )
 }
 
 /// Counts an open connection for as long as it lives.
@@ -297,6 +322,12 @@ pub async fn probe(
         .and_then(|v| v.to_str().ok())
         .and_then(|s| chrono::DateTime::parse_from_rfc2822(s.trim()).ok())
         .map(|d| d.with_timezone(&chrono::Utc));
+    let etag = h
+        .get(ETAG)
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
 
     let (total_size, resumable) = if status == StatusCode::PARTIAL_CONTENT {
         // "bytes 0-0/123456"
@@ -351,6 +382,7 @@ pub async fn probe(
         content_type,
         kind,
         last_modified,
+        etag,
     })
 }
 
@@ -374,7 +406,7 @@ mod refused_tests {
                     let resp = if refused {
                         "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string()
                     } else {
-                        "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nContent-Type: application/octet-stream\r\nConnection: close\r\n\r\nhello".to_string()
+                        "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nContent-Type: application/octet-stream\r\nETag: \"test-v1\"\r\nLast-Modified: Sun, 13 Nov 2016 10:00:00 GMT\r\nConnection: close\r\n\r\nhello".to_string()
                     };
                     let _ = s.write_all(resp.as_bytes()).await;
                 });
@@ -390,8 +422,53 @@ mod refused_tests {
         let headers = RequestHeaders { cookies: Some("cf=1".into()), ..Default::default() };
         let p = probe(&client, &url, &headers, "UA").await.unwrap();
         assert_eq!(p.total_size, Some(5));
+        assert_eq!(p.etag.as_deref(), Some("\"test-v1\""));
+        assert!(p.last_modified.is_some());
         assert!(!p.resumable, "the server refuses ranges: one plain connection");
         let used = p.headers_used.expect("it worked only without the cookie");
         assert!(used.cookies.is_none());
+    }
+}
+
+
+#[cfg(test)]
+mod validator_tests {
+    use super::*;
+
+    fn stamp(value: &str) -> chrono::DateTime<chrono::Utc> {
+        chrono::DateTime::parse_from_rfc3339(value).unwrap().with_timezone(&chrono::Utc)
+    }
+
+    #[test]
+    fn changed_strong_etag_invalidates_partial_data() {
+        let time = stamp("2026-11-13T10:00:00Z");
+        assert!(remote_file_changed(Some("\"v1\""), Some(&time), Some("\"v2\""), Some(&time)));
+    }
+
+    #[test]
+    fn unchanged_strong_etag_is_authoritative() {
+        let old = stamp("2026-11-13T10:00:00Z");
+        let new = stamp("2026-11-13T10:00:01Z");
+        assert!(!remote_file_changed(Some("\"same\""), Some(&old), Some("\"same\""), Some(&new)));
+    }
+
+    #[test]
+    fn weak_etags_fall_back_to_last_modified() {
+        let old = stamp("2026-11-13T10:00:00Z");
+        let new = stamp("2026-11-13T10:00:01Z");
+        assert!(remote_file_changed(Some("W/\"v1\""), Some(&old), Some("W/\"v1\""), Some(&new)));
+    }
+
+    #[test]
+    fn last_modified_is_used_when_etag_is_unavailable() {
+        let old = stamp("2026-11-13T10:00:00Z");
+        let new = stamp("2026-11-13T10:00:01Z");
+        assert!(remote_file_changed(None, Some(&old), None, Some(&new)));
+        assert!(!remote_file_changed(None, Some(&old), None, Some(&old)));
+    }
+
+    #[test]
+    fn absent_validators_do_not_force_a_restart() {
+        assert!(!remote_file_changed(None, None, None, None));
     }
 }

@@ -195,7 +195,7 @@ pub struct SiteLogin {
 pub const MAIN_QUEUE: u64 = 1;
 
 /// Bump when defaults change in a way old settings files should pick up.
-const SETTINGS_VERSION: u32 = 4;
+const SETTINGS_VERSION: u32 = 5;
 
 /// Columns of the download list that can be shown or hidden (View > Columns).
 pub const ALL_COLUMNS: [&str; 11] =
@@ -445,7 +445,8 @@ impl Default for Settings {
             toolbar_small: false,
             force_shutdown: false,
             extension_prompted: false,
-            start_while_info: true,
+            // a download starts only when the user presses Start
+            start_while_info: false,
             language: String::new(),
         }
     }
@@ -493,6 +494,11 @@ impl Settings {
                 }
             }
             s.schedule.enabled = false;
+        }
+        if s.version < 5 {
+            // v5: "Download File Info" no longer downloads before Start is
+            // pressed (it was on by default; the option stays for those who want it)
+            s.start_while_info = false;
         }
         s.version = SETTINGS_VERSION;
         if !s.queues.iter().any(|q| q.id == MAIN_QUEUE) {
@@ -765,5 +771,25 @@ mod column_tests {
         // hidden in View > Columns: not shown, order kept for later
         s.columns.retain(|c| c != "size");
         assert_eq!(keys(&s)[0], "name");
+    }
+}
+
+#[cfg(test)]
+mod start_tests {
+    use super::*;
+
+    #[test]
+    fn a_download_starts_only_after_start_is_pressed() {
+        assert!(!Settings::default().start_while_info);
+        // an older settings file that had the old default switched on
+        let dir = std::env::temp_dir().join(format!("badzy-start-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("settings.json");
+        std::fs::write(&file, r#"{"version":4,"start_while_info":true}"#).unwrap();
+        assert!(!Settings::load(&file).start_while_info);
+        // a newer file keeps what the user chose
+        std::fs::write(&file, r#"{"version":5,"start_while_info":true}"#).unwrap();
+        assert!(Settings::load(&file).start_while_info);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

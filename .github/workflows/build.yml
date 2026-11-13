@@ -1,77 +1,65 @@
 name: Build Badzy
 
-# Every push: build and keep the result as an artifact.
-# A push to main whose commit message contains [release] also publishes a
-# GitHub release v<version> with the setup and version.json; installed
-# copies of the program read version.json of the latest release
-# (Help > Check for updates, or by themselves when they start).
+# Builds Badzy.exe and nothing else: no installer, no tests, no zip, no
+# release. The result is the plain exe, downloadable from the run page.
+# Releases are made by hand.
+#
+# Speed: ordinary pushes use the quick "ci" profile (Cargo.toml). Put [full]
+# in the commit message (or tick "full" on a manual run) for the fully
+# optimised release profile, which takes much longer.
 
 on:
   push:
+    # branches only: a tag or release made by hand never starts a build
+    # (naming only tags-ignore would stop every branch push too)
+    branches:
+      - "**"
     paths-ignore:
       - "**.md"
       - "docs/**"
       - "assets/**"
   workflow_dispatch:
+    inputs:
+      full:
+        description: "Full release optimisation (slower build)"
+        type: boolean
+        default: false
 
 permissions:
-  contents: write
+  contents: read
 
-# a newer push to the same branch replaces a running build (never on main,
-# so a release in progress is not cut off)
+# a newer push to the same branch replaces a running build
 concurrency:
   group: build-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: true
 
 jobs:
-  # Badzy's own small ffmpeg.exe (LGPL: joins video + audio, MP3, MP4, preview).
-  # Built once with mingw on Linux and cached; a change of scripts/ffmpeg/build.sh
-  # or of the versions below builds it again. If this job fails the Windows
-  # job falls back to a prebuilt LGPL ffmpeg, so a build never ends without one.
-  ffmpeg:
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    env:
-      FFMPEG_TAG: n7.1.1
-      LAME_VERSION: "3.100"
-      LAME_SHA256: ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - name: Restore cached ffmpeg
-        id: cache
-        uses: actions/cache@v4
-        with:
-          path: ffmpeg-out
-          key: ffmpeg-${{ env.FFMPEG_TAG }}-lame${{ env.LAME_VERSION }}-${{ hashFiles('scripts/ffmpeg/build.sh') }}
-      - name: Build ffmpeg
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq mingw-w64 nasm pkg-config make xz-utils
-          git clone --quiet --depth 1 --branch "$FFMPEG_TAG" https://github.com/FFmpeg/FFmpeg ffmpeg-src
-          curl -fsSL -o lame.tar.gz "https://downloads.sourceforge.net/project/lame/lame/$LAME_VERSION/lame-$LAME_VERSION.tar.gz"
-          echo "$LAME_SHA256  lame.tar.gz" | sha256sum -c -
-          mkdir lame-src && tar xzf lame.tar.gz -C lame-src --strip-components=1
-          bash scripts/ffmpeg/build.sh ffmpeg-src lame-src ffmpeg-out
-          echo "ffmpeg $FFMPEG_TAG, LAME $LAME_VERSION (LGPL build made by scripts/ffmpeg/build.sh)" > ffmpeg-out/ffmpeg-version.txt
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: ffmpeg-win64
-          path: ffmpeg-out
-          if-no-files-found: error
-
   windows:
-    needs: ffmpeg
-    # run even when the ffmpeg job failed (the fallback below covers it)
-    if: ${{ !cancelled() }}
     runs-on: windows-latest
+    timeout-minutes: 40
     steps:
-      # actions pinned to exact commits (a moved tag can't change the build)
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          # the cache is saved by every branch's first build, so builds after
+          # a change in Cargo.lock start from the dependencies already built
+          cache-on-failure: true
+      - name: Pick the build profile
+        shell: pwsh
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          $full = ("${{ inputs.full }}" -eq "true") -or ($env:COMMIT_MESSAGE -match '\[full\]')
+          $profile = if ($full) { "release" } else { "ci" }
+          Write-Host "Build profile: $profile"
+          "PROFILE=$profile" | Out-File -Append $env:GITHUB_ENV
+      - name: Build
+        run: cargo build --profile $env:PROFILE -p swiftget
+      - name: Test Rust workspace
+        run: cargo test --workspace --locked
       - name: Test browser extension
         shell: pwsh
         run: |
@@ -82,187 +70,9 @@ jobs:
           node extension/test/yt-core.test.js
           node extension/test/i18n.test.js
           node extension/test/background.sim.js
-      - name: Build release
-        run: cargo build --release
-      - name: Get ffmpeg from the ffmpeg job
-        uses: actions/download-artifact@v4
-        continue-on-error: true
+      # the exe itself, not zipped
+      - uses: actions/upload-artifact@v7
         with:
-          name: ffmpeg-win64
-          path: build-cache/ffmpeg
-      - name: Collect helper tools (ffmpeg, yt-dlp, aria2c)
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $t = "build-cache/stage/tools"
-          New-Item -ItemType Directory -Force $t | Out-Null
-          # ffmpeg: our own build; else a prebuilt LGPL one, checked against its published SHA-256
-          if (Test-Path "build-cache/ffmpeg/ffmpeg.exe") {
-            Write-Host "ffmpeg: Badzy's own build"
-            Copy-Item build-cache/ffmpeg/* $t -Force
-          } else {
-            Write-Host "::warning::our own ffmpeg build is not available, using the prebuilt LGPL ffmpeg"
-            $base = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest"
-            $zipName = "ffmpeg-master-latest-win64-lgpl.zip"
-            Invoke-WebRequest "$base/$zipName" -OutFile "build-cache/$zipName"
-            Invoke-WebRequest "$base/checksums.sha256" -OutFile build-cache/ff-sums.txt
-            $line = ((Get-Content build-cache/ff-sums.txt) | Where-Object { $_ -match [regex]::Escape($zipName) } | Select-Object -First 1)
-            if (-not $line) { throw "no checksum published for $zipName" }
-            if ((Get-FileHash "build-cache/$zipName" -Algorithm SHA256).Hash -ne $line.Trim().Split(" ")[0]) { throw "$zipName does not match its SHA-256" }
-            Expand-Archive "build-cache/$zipName" "build-cache/ffmpeg-btbn" -Force
-            Copy-Item (Get-ChildItem build-cache/ffmpeg-btbn -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName "$t/ffmpeg.exe" -Force
-            $lic = Get-ChildItem build-cache/ffmpeg-btbn -Recurse -Filter LICENSE.txt | Select-Object -First 1
-            if ($lic) { Copy-Item $lic.FullName "$t/ffmpeg-LICENSE.txt" -Force }
-            "ffmpeg: prebuilt LGPL build (BtbN FFmpeg-Builds)" | Set-Content "$t/ffmpeg-version.txt"
-          }
-          # yt-dlp: latest release, checked against the SHA-256 list yt-dlp publishes
-          $ytBase = "https://github.com/yt-dlp/yt-dlp/releases/latest/download"
-          Invoke-WebRequest "$ytBase/yt-dlp.exe" -OutFile "$t/yt-dlp.exe"
-          Invoke-WebRequest "$ytBase/SHA2-256SUMS" -OutFile build-cache/yt-sums.txt
-          $ytLine = ((Get-Content build-cache/yt-sums.txt) | Where-Object { $_ -match '\s\*?yt-dlp\.exe\s*$' } | Select-Object -First 1)
-          if (-not $ytLine) { throw "no checksum published for yt-dlp.exe" }
-          if ((Get-FileHash "$t/yt-dlp.exe" -Algorithm SHA256).Hash -ne $ytLine.Trim().Split(" ")[0]) { throw "yt-dlp.exe does not match its SHA-256" }
-          # aria2c (torrents): one fixed, known release
-          Invoke-WebRequest "https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip" -OutFile build-cache/aria2.zip
-          if ((Get-FileHash build-cache/aria2.zip -Algorithm SHA256).Hash -ne "67D015301EEF0B612191212D564C5BB0A14B5B9C4796B76454276A4D28D9B288") { throw "aria2.zip does not match its SHA-256" }
-          Expand-Archive build-cache/aria2.zip build-cache/aria2-tmp -Force
-          Copy-Item (Get-ChildItem build-cache/aria2-tmp -Recurse -Filter aria2c.exe | Select-Object -First 1).FullName "$t/aria2c.exe" -Force
-          Copy-Item (Get-ChildItem build-cache/aria2-tmp -Recurse -Filter COPYING | Select-Object -First 1).FullName "$t/aria2-COPYING.txt" -Force
-          Get-ChildItem $t | Format-Table Name, Length
-      - name: Package
-        shell: pwsh
-        env:
-          # Mozilla add-on keys (addons.mozilla.org > Developer Hub > API keys);
-          # with them the Firefox add-on is signed and stays in Firefox for good
-          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
-          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
-          # Ed25519 key that signs version.json; the program installs only
-          # updates signed with it (selfupdate.rs has the public half)
-          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
-          IS_RELEASE: ${{ github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[release]') }}
-        run: |
-          $version = ([regex]::Match((Get-Content Cargo.toml -Raw), '(?m)^version\s*=\s*"([^"]+)"')).Groups[1].Value
-          if ("${{ github.ref_type }}" -eq "tag") {
-            $tag = "${{ github.ref_name }}".TrimStart("v")
-            if ($tag -ne $version) { throw "Tag v$tag does not match version $version in Cargo.toml" }
-          }
-          "VERSION=$version" | Out-File -Append $env:GITHUB_ENV
-          # everything for the setup is gathered here; the result is the setup only
-          $p = "build-cache/stage"
-          New-Item -ItemType Directory -Force "$p/tools", "dist" | Out-Null
-          Copy-Item target/release/Badzy.exe $p
-          Copy-Item THIRD-PARTY-NOTICES.txt $p
-          Copy-Item -Recurse extension "$p/extension"
-          Copy-Item -Recurse extension "$p/extension-firefox"
-          Remove-Item -Recurse -Force "$p/extension/test", "$p/extension-firefox/test"
-          Copy-Item -Force "$p/extension-firefox/manifest.firefox.json" "$p/extension-firefox/manifest.json"
-          Remove-Item -Force "$p/extension-firefox/manifest.firefox.json", "$p/extension/manifest.firefox.json"
-          # the add-on has its own version (manifest.firefox.json)
-          $extVersion = (Get-Content extension/manifest.firefox.json -Raw | ConvertFrom-Json).version
-          # Firefox keeps only add-ons signed by Mozilla; a version can be signed
-          # once, so this runs for a release only
-          if ($env:IS_RELEASE -eq "true" -and $env:AMO_JWT_ISSUER -and $env:AMO_JWT_SECRET -and -not (Test-Path "extension-signed/badzy-firefox-$extVersion.xpi")) {
-            npx --yes web-ext@8.10.0 sign --channel=unlisted --source-dir "$p/extension-firefox" --artifacts-dir xpi-out --api-key "$env:AMO_JWT_ISSUER" --api-secret "$env:AMO_JWT_SECRET" --approval-timeout 900000
-            $xpi = Get-ChildItem xpi-out -Filter *.xpi | Select-Object -First 1
-            if ($xpi) {
-              Copy-Item $xpi.FullName "$p/badzy-firefox.xpi"
-              Copy-Item $xpi.FullName "dist/badzy-firefox.xpi"
-              $fx = "{`n  ""addons"": {`n    ""badzy@badzy.local"": {`n      ""updates"": [`n        { ""version"": ""$extVersion"", ""update_link"": ""https://github.com/${{ github.repository }}/releases/download/v$version/badzy-firefox.xpi"" }`n      ]`n    }`n  }`n}`n"
-              [IO.File]::WriteAllText("$PWD/dist/firefox-updates.json", $fx)
-            } else { Write-Host "::warning::the Firefox add-on was not signed" }
-          } elseif ($env:IS_RELEASE -eq "true") { Write-Host "::warning::AMO_JWT_ISSUER / AMO_JWT_SECRET are not set: the Firefox add-on is not signed" }
-          # an add-on of this version already signed (by hand on addons.mozilla.org)
-          $signed = "extension-signed/badzy-firefox-$extVersion.xpi"
-          if (-not (Test-Path "$p/badzy-firefox.xpi") -and (Test-Path $signed)) {
-            Copy-Item $signed "$p/badzy-firefox.xpi"
-            Copy-Item $signed "dist/badzy-firefox.xpi"
-            $fx = "{`n  ""addons"": {`n    ""badzy@badzy.local"": {`n      ""updates"": [`n        { ""version"": ""$extVersion"", ""update_link"": ""https://github.com/${{ github.repository }}/releases/download/v$version/badzy-firefox.xpi"" }`n      ]`n    }`n  }`n}`n"
-            [IO.File]::WriteAllText("$PWD/dist/firefox-updates.json", $fx)
-          }
-          choco install innosetup -y --no-progress
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /Q "/DMyAppVersion=$version" installer\badzy.iss
-          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed" }
-          $hash = (Get-FileHash dist/Badzy-Setup.exe -Algorithm SHA256).Hash.ToLower()
-          # the signature the program checks before it installs an update
-          $sig = ""
-          if ($env:UPDATE_SIGNING_KEY) {
-            $sig = (cargo run --quiet --release -p swiftget-engine --example sign_update -- $version $hash).Trim()
-            if ($LASTEXITCODE -ne 0 -or $sig.Length -ne 128) { throw "could not sign the release" }
-          } elseif ($env:IS_RELEASE -eq "true") {
-            throw "UPDATE_SIGNING_KEY is not set: installed copies would refuse this update"
-          }
-          $json = "{`n  ""version"": ""$version"",`n  ""url"": ""https://github.com/${{ github.repository }}/releases/download/v$version/Badzy-Setup.exe"",`n  ""sha256"": ""$hash"",`n  ""sig"": ""$sig""`n}`n"
-          [IO.File]::WriteAllText("$PWD/dist/version.json", $json)
-          Get-Content dist/version.json
-          Compress-Archive -Path dist/Badzy-Setup.exe, dist/version.json -DestinationPath Badzy-windows.zip -Force
-      - name: Test the helpers and the installer
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          foreach ($tool in "ffmpeg.exe -version", "yt-dlp.exe --version", "aria2c.exe --version") {
-            $parts = $tool.Split(" ")
-            $all = & "build-cache/stage/tools/$($parts[0])" $parts[1] 2>&1
-            $code = $LASTEXITCODE
-            Write-Host "$($parts[0]) exit code $code : $($all | Select-Object -First 1)"
-            if ($code -ne 0) { throw "$($parts[0]) does not run (exit code $code)" }
-          }
-          # silent install, check the files, silent uninstall
-          $dir = Join-Path $env:RUNNER_TEMP "BadzyInstallTest"
-          Start-Process dist/Badzy-Setup.exe -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/TASKS=", "/DIR=`"$dir`"" -Wait
-          foreach ($f in "Badzy.exe", "tools\ffmpeg.exe", "tools\yt-dlp.exe", "tools\aria2c.exe", "extension\manifest.json") {
-            if (-not (Test-Path (Join-Path $dir $f))) { throw "the installer did not install $f" }
-          }
-          $un = Get-ChildItem $dir -Filter "unins*.exe" | Select-Object -First 1
-          Start-Process $un.FullName -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES" -Wait
-          Write-Host "Installer test passed"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: Badzy-windows
-          path: Badzy-windows.zip
-      # A pre-release from any branch: put "[prerelease v0.1]" in the commit
-      # message. The setup is attached as "Badzy v0.1.exe". It is marked
-      # pre-release, so it never becomes the "latest" release that installed
-      # copies read their updates from, and no other release is touched.
-      - name: Publish pre-release
-        if: contains(github.event.head_commit.message, '[prerelease v')
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
-        run: |
-          $m = [regex]::Match($env:COMMIT_MESSAGE, '\[prerelease (v[0-9][0-9A-Za-z.\-]*)\]')
-          if (-not $m.Success) { throw "no version in the [prerelease ...] tag" }
-          $tag = $m.Groups[1].Value
-          gh release view $tag --repo "${{ github.repository }}" *> $null
-          if ($LASTEXITCODE -eq 0) { Write-Host "$tag is already released"; exit 0 }
-          $file = "dist/Badzy $tag.exe"
-          Copy-Item dist/Badzy-Setup.exe $file
-          $notes = "Badzy $tag (build of $($env:GITHUB_REF_NAME)). Run the setup; it installs Badzy with ffmpeg, yt-dlp, aria2c and the browser extensions (Chrome / Edge folder ``extension``, Firefox folder ``extension-firefox``)."
-          gh release create $tag $file --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "Badzy $tag" --notes $notes --prerelease
-          if ($LASTEXITCODE -ne 0) { throw "could not create the pre-release" }
-      # a release is published only when the commit message says [release]
-      # (tag v<version> is created here); the same version again is skipped
-      - name: Publish release
-        if: github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[release]')
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release view "v$env:VERSION" --repo "${{ github.repository }}" *> $null
-          if ($LASTEXITCODE -eq 0) { Write-Host "v$env:VERSION is already released"; exit 0 }
-          $files = @("dist/Badzy-Setup.exe", "dist/version.json")
-          if (Test-Path dist/badzy-firefox.xpi) { $files += "dist/badzy-firefox.xpi", "dist/firefox-updates.json" }
-          $notes = "Badzy $env:VERSION"
-          $m = [regex]::Match((Get-Content docs/CHANGELOG.md -Raw), "(?ms)^## $([regex]::Escape($env:VERSION))\b[^\n]*\n(.*?)(?=^## |\z)")
-          if ($m.Success) { $notes = $m.Groups[1].Value.Trim() }
-          Set-Content -Path release-notes.md -Value $notes -Encoding utf8
-          gh release create "v$env:VERSION" @files --repo "${{ github.repository }}" --target "${{ github.sha }}" --title "Badzy $env:VERSION" --notes-file release-notes.md --latest
-          if ($LASTEXITCODE -ne 0) { throw "could not create the release" }
-          # only the newest release stays: older ones (and their tags) go
-          $tags = gh release list --repo "${{ github.repository }}" --limit 100 --json tagName -q '.[].tagName'
-          foreach ($t in $tags) {
-            if ($t -and $t -ne "v$env:VERSION") {
-              Write-Host "Removing old release $t"
-              gh release delete $t --repo "${{ github.repository }}" --yes --cleanup-tag
-            }
-          }
+          path: target/${{ env.PROFILE }}/Badzy.exe
+          archive: false
+          if-no-files-found: error

@@ -76,6 +76,8 @@ pub struct ProbeResult {
     pub kind: DownloadKind,
     /// the server's "Last-Modified" date
     pub last_modified: Option<DateTime<Utc>>,
+    /// Strong entity tag for detecting a changed file before resuming.
+    pub etag: Option<String>,
     /// the server refused the request as it was (HTTP 403 and the like) and
     /// took it with these headers instead: the download uses them too
     pub headers_used: Option<RequestHeaders>,
@@ -184,6 +186,9 @@ pub struct DownloadRecord {
     /// server's file date (Last-Modified)
     #[serde(default)]
     pub server_time: Option<DateTime<Utc>>,
+    /// HTTP entity tag saved with partial data; absent in older saved records.
+    #[serde(default)]
+    pub etag: Option<String>,
     /// automatic retries done by its queue
     #[serde(default)]
     pub retry_count: u32,

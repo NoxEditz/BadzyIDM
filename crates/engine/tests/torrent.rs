@@ -310,3 +310,45 @@ async fn only_the_checked_files_of_a_torrent() {
     seeder.remove(&sg).await;
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// A link to a .torrent file on a web site: the file is fetched and kept for the
+/// torrent window, a page that is not a torrent is refused.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn torrent_file_behind_a_web_address() {
+    let root = std::env::temp_dir().join(format!("badzy-weblink-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let torrent = make_torrent("film.mkv", &vec![7u8; 40_000], "http://127.0.0.1:1/announce");
+    let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = l.local_addr().unwrap().port();
+    let body = torrent.clone();
+    tokio::spawn(async move {
+        loop {
+            let (mut s, _) = l.accept().await.unwrap();
+            let body = body.clone();
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 4096];
+                let n = s.read(&mut buf).await.unwrap_or(0);
+                let req = String::from_utf8_lossy(&buf[..n]).to_string();
+                let (ctype, data) = if req.starts_with("GET /page") {
+                    ("text/html", b"<html>login</html>".to_vec())
+                } else {
+                    ("application/x-bittorrent", body)
+                };
+                let head = format!("HTTP/1.1 200 OK\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", data.len());
+                let _ = s.write_all(head.as_bytes()).await;
+                let _ = s.write_all(&data).await;
+            });
+        }
+    });
+    let mgr = swiftget_engine::Manager::new(tokio::runtime::Handle::current(), root.join("app")).unwrap();
+    let headers = swiftget_engine::RequestHeaders::default();
+    let url = format!("http://127.0.0.1:{port}/files/film.torrent");
+    assert!(swiftget_engine::torrent::is_torrent_web_link(&url));
+    let path = mgr.fetch_torrent_file(&url, &headers).await.unwrap();
+    assert_eq!(std::fs::read(&path).unwrap(), torrent);
+    let info = parse_torrent(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(info.name, "film.mkv");
+    let err = mgr.fetch_torrent_file(&format!("http://127.0.0.1:{port}/page/login.torrent"), &headers).await.unwrap_err();
+    assert!(format!("{err:#}").contains("not a torrent"), "{err:#}");
+    let _ = std::fs::remove_dir_all(&root);
+}

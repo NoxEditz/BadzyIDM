@@ -14,7 +14,7 @@ use crate::torrent;
 use crate::segments;
 use crate::store;
 use crate::system;
-use anyhow::anyhow;
+use anyhow::{anyhow, Context as _};
 use chrono::{Datelike, Timelike, Utc};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
@@ -246,6 +246,49 @@ impl Manager {
         http::probe(&self.shared.client(), url, &headers, &ua).await
     }
 
+    /// A .torrent file behind a web address: fetched now (they are small) and
+    /// kept in our folder, so the torrent window can show its files and the
+    /// torrent can start. A link to a .torrent file is not a download of its
+    /// own: what the user wants is what the torrent shares.
+    pub async fn fetch_torrent_file(&self, url: &str, headers: &RequestHeaders) -> anyhow::Result<PathBuf> {
+        const MAX: usize = 32 << 20;
+        let (ua, headers) = {
+            let s = self.settings.read().unwrap();
+            (s.user_agent.clone(), with_login(&s, url, headers))
+        };
+        let mut resp = http::request(&self.shared.client(), url, &headers, &ua)
+            .send()
+            .await
+            .context("could not connect to server")?;
+        if !resp.status().is_success() {
+            anyhow::bail!("server answered HTTP {}", resp.status().as_u16());
+        }
+        let mut bytes: Vec<u8> = Vec::new();
+        while let Some(chunk) = resp.chunk().await.context("the torrent file could not be read")? {
+            bytes.extend_from_slice(&chunk);
+            if bytes.len() > MAX {
+                anyhow::bail!("this is not a torrent file (it is too big)");
+            }
+        }
+        torrent::parse_torrent(&bytes).map_err(|_| anyhow!("the file at this address is not a torrent (the page may need a login)"))?;
+        let dir = self.data_dir.join("torrents");
+        std::fs::create_dir_all(&dir)?;
+        // earlier ones of this kind are not needed any more
+        if let Ok(list) = std::fs::read_dir(&dir) {
+            for e in list.flatten() {
+                let old = e.file_name().to_string_lossy().starts_with("web-")
+                    && e.metadata().and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).map(|a| a > Duration::from_secs(86_400)).unwrap_or(false);
+                if old {
+                    let _ = std::fs::remove_file(e.path());
+                }
+            }
+        }
+        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+        let path = dir.join(format!("web-{stamp}.torrent"));
+        std::fs::write(&path, &bytes).context("the torrent file could not be saved")?;
+        Ok(path)
+    }
+
     /// The HTTP client (with the proxy settings), for the site grabber.
     pub fn client(&self) -> reqwest::Client {
         self.shared.client()
@@ -366,6 +409,7 @@ impl Manager {
             queue_pos: id,
             last_try: None,
             server_time: probe.as_ref().and_then(|p| p.last_modified),
+            etag: probe.as_ref().and_then(|p| p.etag.clone()),
             retry_count: 0,
             pick_quality: req.pick_quality.clone(),
             work_stem: None,
@@ -1231,11 +1275,30 @@ impl Manager {
                 "the address opens a web page, not a file (the link may have expired - use \"Refresh download address\")"
             );
         }
+        let validator_changed = rec.kind == DownloadKind::Http
+            && p.kind == DownloadKind::Http
+            && http::remote_file_changed(
+                rec.etag.as_deref(),
+                rec.server_time.as_ref(),
+                p.etag.as_deref(),
+                p.last_modified.as_ref(),
+            );
         {
             let mut table = segs.lock().unwrap();
             let changed = rec.total_size.is_some() && p.total_size != rec.total_size;
-            if changed || !p.resumable {
+            if changed || !p.resumable || validator_changed {
                 table.clear();
+            }
+        }
+        if validator_changed {
+            // Do not let persisted segment offsets survive a version change.
+            rec.segments.clear();
+            rec.downloaded = 0;
+            rec.parts_total = 0;
+            rec.parts_done = 0;
+            progress.bytes.store(0, Ordering::Relaxed);
+            if let Ok(file) = std::fs::OpenOptions::new().write(true).open(rec.part_path()) {
+                let _ = file.set_len(0);
             }
         }
         // the server only took the request without the browser's cookies /
@@ -1250,6 +1313,7 @@ impl Manager {
         rec.resumable = p.resumable;
         rec.kind = p.kind;
         rec.server_time = p.last_modified.or(rec.server_time);
+        rec.etag = p.etag.clone().or_else(|| rec.etag.clone());
         rec.connections = settings.connections_for(&p.final_url, rec.connections);
         // added without a name (batch, clipboard): use the server's real name
         // and the matching category folder before the first byte is written
@@ -1279,6 +1343,13 @@ impl Manager {
                 x.category = r.category;
                 x.auto_name = false;
                 x.server_time = r.server_time;
+                x.etag = r.etag;
+                if validator_changed {
+                    x.segments.clear();
+                    x.downloaded = 0;
+                    x.parts_total = 0;
+                    x.parts_done = 0;
+                }
                 if x.status == Status::Connecting {
                     x.status = Status::Downloading;
                 }
