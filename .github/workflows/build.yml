@@ -10,8 +10,9 @@ name: Build Badzy
 
 on:
   push:
-    # a tag or release made by hand never starts a build
-    tags-ignore:
+    # branches only: a tag or release made by hand never starts a build
+    # (naming only tags-ignore would stop every branch push too)
+    branches:
       - "**"
     paths-ignore:
       - "**.md"
