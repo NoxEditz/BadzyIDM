@@ -187,6 +187,14 @@ pub fn is_torrent_source(s: &str) -> bool {
     is_magnet(s) || (!s.contains("://") && s.to_ascii_lowercase().ends_with(".torrent"))
 }
 
+/// A web address of a .torrent file ("https://site/x.torrent"). Such a link
+/// is not a download of its own: the torrent is what the user wants.
+pub fn is_torrent_web_link(s: &str) -> bool {
+    url::Url::parse(s.trim())
+        .map(|u| matches!(u.scheme(), "http" | "https") && u.path().to_ascii_lowercase().ends_with(".torrent"))
+        .unwrap_or(false)
+}
+
 /// The name a magnet link gives ("dn="), if any.
 pub fn magnet_name(uri: &str) -> Option<String> {
     let query = uri.trim().split_once('?')?.1;
@@ -511,6 +519,11 @@ mod tests {
         assert!(is_torrent_source(m));
         assert!(is_torrent_source(r"C:\Users\a\Downloads\x.torrent"));
         assert!(!is_torrent_source("https://site/x.torrent"));
+        assert!(is_torrent_web_link("https://site/dl/Big.Film.TORRENT?token=1"));
+        assert!(is_torrent_web_link("http://site/x.torrent"));
+        assert!(!is_torrent_web_link("https://site/film.mkv"));
+        assert!(!is_torrent_web_link("https://site/page?file=x.torrent"));
+        assert!(!is_torrent_web_link(r"C:\x.torrent"));
         assert!(!is_magnet("magnet:?xt=urn:sha1:abc"));
         assert_eq!(magnet_name(m).as_deref(), Some("Big Film (2024)"));
         assert_eq!(magnet_name("magnet:?xt=urn:btih:00"), None);
