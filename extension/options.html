@@ -15,7 +15,7 @@
   header img { width:46px; height:46px; filter:drop-shadow(0 5px 14px #ff405425); }
   h1 { margin:0; font-size:24px; letter-spacing:-.6px; }
   .subtitle { margin:3px 0 0; color:var(--muted); font-size:12px; }
-  .status { margin-left:auto; display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; }
+  .status { margin-inline-start:auto; display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; }
   .dot { width:8px; height:8px; border-radius:50%; background:#7a7580; }
   .status.on .dot { background:var(--green); box-shadow:0 0 0 4px #42d39216; }
   .hero { border:1px solid #4b202a; border-radius:16px; padding:18px 20px; background:linear-gradient(120deg,#211016,#131218 72%); margin-bottom:14px; }
@@ -32,7 +32,7 @@
   .setting-copy small { display:block; margin-top:3px; color:var(--muted); font-size:11.5px; }
   input[type=number] { width:136px; height:37px; padding:0 10px; color:var(--text); background:#0c0c11; border:1px solid #38353f; border-radius:9px; font:inherit; }
   input[type=range] { width:180px; accent-color:var(--red); }
-  output { min-width:42px; color:var(--text); font-size:12px; text-align:right; font-variant-numeric:tabular-nums; }
+  output { min-width:42px; color:var(--text); font-size:12px; text-align:end; font-variant-numeric:tabular-nums; }
   .range-control { display:flex; align-items:center; gap:10px; }
   .switch { position:relative; flex:none; width:42px; height:24px; }
   .switch input { position:absolute; width:1px; height:1px; opacity:0; }
@@ -44,6 +44,20 @@
   button { height:35px; padding:0 13px; color:#fff; background:var(--red2); border:0; border-radius:9px; font:inherit; font-weight:700; cursor:pointer; transition:transform .15s,background .15s; }
   button:hover { background:var(--red); transform:translateY(-1px); }
   button:focus-visible,input:focus-visible { outline:2px solid var(--red); outline-offset:2px; }
+  textarea,select.field { width:260px; max-width:100%; min-height:37px; padding:8px 10px; color:var(--text); background:#0c0c11; border:1px solid #38353f; border-radius:9px; font:inherit; resize:vertical; }
+  textarea { min-height:78px; }
+  input[type=text] { width:260px; max-width:100%; height:37px; padding:0 10px; color:var(--text); background:#0c0c11; border:1px solid #38353f; border-radius:9px; font:inherit; }
+  textarea:focus-visible,select:focus-visible,input[type=text]:focus-visible { outline:2px solid var(--red); outline-offset:2px; }
+  button.ghost { background:#24232b; border:1px solid #38353f; color:var(--text); }
+  button.ghost:hover { background:#2d2c36; }
+  button.danger { background:#3a1119; border:1px solid #6a2230; color:#ffacb7; }
+  .btn-row { display:flex; flex-wrap:wrap; gap:9px; }
+  kbd { display:inline-block; padding:2px 7px; border:1px solid #3b3943; border-bottom-width:2px; border-radius:6px; background:#1f1e26; font:600 11.5px/1.4 "Segoe UI",system-ui,sans-serif; }
+  .keys-list { padding:6px 18px 14px; }
+  .key-row { display:flex; justify-content:space-between; gap:12px; padding:8px 0; border-top:1px solid #24232b; font-size:13px; }
+  .key-row:first-child { border-top:0; }
+  .test-result { min-height:18px; margin-top:6px; font-size:12px; color:var(--muted); }
+  .test-result.ok { color:var(--green); } .test-result.bad { color:#ff8997; }
   .saved { min-height:22px; padding:3px 2px; color:var(--green); font-size:12px; }
   .saved.error { color:#ff8997; }
   .footnote { color:var(--muted); font-size:11px; margin:10px 2px 0; }
@@ -54,38 +68,99 @@
 <div class="wrap">
   <header>
     <img src="icons/icon48.png" alt="">
-    <div><h1>Badzy <span style="color:var(--red)">/</span> Settings</h1><p class="subtitle">Tune the browser integration to your workflow.</p></div>
-    <div class="status" id="status" role="status"><span class="dot"></span><span id="statusText">Checking desktop app…</span></div>
+    <div><h1>Badzy <span style="color:var(--red)">/</span> <span data-i18n="optTitle">Extension settings</span></h1><p class="subtitle" data-i18n="optSub">Tune the browser integration to your workflow.</p></div>
+    <div class="status" id="status" role="status"><span class="dot"></span><span id="statusText" data-i18n="checking">Checking app…</span></div>
   </header>
-  <section class="hero"><strong>One app. Every download.</strong><p>Browser downloads and supported video streams are handed to the Badzy desktop app running locally on your PC. No account or cloud relay needed.</p></section>
+  <section class="hero"><strong data-i18n="heroTitle">One app. Every download.</strong><p data-i18n="heroText">Browser downloads and supported video streams are handed to the Badzy desktop app running locally on your PC.</p></section>
+
   <section class="card">
-    <div class="card-head"><h2>Download behavior</h2><p>Choose which features Badzy controls in your browser.</p></div>
     <div class="setting">
-      <div class="setting-copy"><label for="intercept">Send browser downloads to Badzy</label><small>When disabled, regular browser downloads stay in Chrome / Edge / Firefox. Explicit quick-add actions are paused by the main integration toggle.</small></div>
-      <label class="switch" aria-label="Send browser downloads to Badzy"><input type="checkbox" id="intercept"><span class="knob"></span></label>
-    </div>
-    <div class="setting">
-      <div class="setting-copy"><label for="minSize">Ignore small files</label><small>Leave files below this size to the browser. Set to 0 to capture all sizes.</small></div>
-      <div><input type="number" id="minSize" min="0" max="104857600" step="1" inputmode="numeric" aria-describedby="minSizeUnit"><small id="minSizeUnit" style="display:block;color:var(--muted);text-align:right;margin-top:4px">kilobytes</small></div>
+      <div class="setting-copy"><label for="lang" data-i18n="language">Language</label><small data-i18n="languageHint">Language of the popup and this page.</small></div>
+      <select id="lang" class="field" style="width:170px"><option value="en">English</option><option value="ar">العربية</option></select>
     </div>
   </section>
+
   <section class="card">
-    <div class="card-head"><h2>Connection</h2><p>The extension talks to the desktop app through a loopback-only local API.</p></div>
+    <div class="card-head"><h2 data-i18n="secBehavior">Download behavior</h2><p data-i18n="secBehaviorSub">Choose what Badzy takes from your browser.</p></div>
     <div class="setting">
-      <div class="setting-copy"><label for="port">Local app port</label><small>Default: 9614. Change this only when the desktop app is configured to use another port.</small></div>
-      <input type="number" id="port" min="1024" max="65535" step="1" aria-label="Local app port">
+      <div class="setting-copy"><label for="intercept" data-i18n="intercept">Send browser downloads to Badzy</label><small data-i18n="interceptHint"></small></div>
+      <label class="switch"><input type="checkbox" id="intercept"><span class="knob"></span></label>
+    </div>
+    <div class="setting">
+      <div class="setting-copy"><label for="minSize" data-i18n="minSize">Ignore small files</label><small data-i18n="minSizeHint"></small></div>
+      <div><input type="number" id="minSize" min="0" max="104857600" step="1" inputmode="numeric"><small data-i18n="kb" style="display:block;color:var(--muted);text-align:end;margin-top:4px">kilobytes</small></div>
+    </div>
+    <div class="setting">
+      <div class="setting-copy"><label for="extraExts" data-i18n="extraExts">Extra file types to take</label><small data-i18n="extraExtsHint"></small></div>
+      <input type="text" id="extraExts" placeholder="iso, apk, torrent" spellcheck="false" autocomplete="off">
+    </div>
+    <div class="setting">
+      <div class="setting-copy"><label for="badge" data-i18n="badge">Show ✓ on the toolbar icon</label><small data-i18n="badgeHint"></small></div>
+      <label class="switch"><input type="checkbox" id="badge"><span class="knob"></span></label>
     </div>
   </section>
+
   <section class="card">
-    <div class="card-head"><h2>On-page video button</h2><p>Customize the floating download controls shown on supported pages.</p></div>
+    <div class="card-head"><h2 data-i18n="secSites">Sites to leave alone</h2><p data-i18n="secSitesSub"></p></div>
     <div class="setting">
-      <div class="setting-copy"><label for="bubbleScale">Button size</label><small>Adjust the controls for your screen and the website layout.</small></div>
+      <div class="setting-copy"><label for="blocked" data-i18n="blocked">Blocked sites</label><small data-i18n="blockedHint"></small></div>
+      <textarea id="blocked" spellcheck="false" placeholder="example.com"></textarea>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2 data-i18n="secMenu">Right-click menu</h2><p data-i18n="secMenuSub"></p></div>
+    <div id="menuList"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2 data-i18n="secKeys">Keyboard shortcuts</h2><p data-i18n="secKeysSub"></p></div>
+    <div class="keys-list">
+      <div class="key-row"><span data-i18n="kOpen">Open Badzy</span><span dir="ltr"><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd></span></div>
+      <div class="key-row"><span data-i18n="kVideo">Open the video panel</span><span dir="ltr"><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>V</kbd></span></div>
+      <div class="key-row"><span data-i18n="kAll">Send all links</span><span dir="ltr"><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>L</kbd></span></div>
+      <div class="key-row"><span data-i18n="kToggle">Pause / resume Badzy</span><span dir="ltr"><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>P</kbd></span></div>
+    </div>
+    <div class="setting"><div class="setting-copy"><small id="keysNote" data-i18n="keysManual"></small></div><button type="button" id="keysButton" class="ghost" data-i18n="keysButton">Change shortcuts</button></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2 data-i18n="secConn">Connection</h2><p data-i18n="secConnSub"></p></div>
+    <div class="setting">
+      <div class="setting-copy"><label for="port" data-i18n="port">Local app port</label><small data-i18n="portHint"></small></div>
+      <input type="number" id="port" min="1024" max="65535" step="1">
+    </div>
+    <div class="setting">
+      <div class="setting-copy"><button type="button" id="test" class="ghost" data-i18n="test">Test connection</button><div class="test-result" id="testResult" role="status"></div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2 data-i18n="secVideo">On-page video button</h2><p data-i18n="secVideoSub"></p></div>
+    <div class="setting">
+      <div class="setting-copy"><label for="bubbleScale" data-i18n="scale">Button size</label></div>
       <div class="range-control"><input type="range" id="bubbleScale" min="50" max="200" step="5" value="100"><output id="bubbleScaleText" for="bubbleScale">100%</output></div>
     </div>
+    <div class="setting">
+      <div class="setting-copy"><label for="look" data-i18n="look">Button style</label></div>
+      <select id="look" class="field" style="width:170px"><option value="blue" data-i18n="lookBlue">Blue</option><option value="dark" data-i18n="lookDark">Dark</option><option value="light" data-i18n="lookLight">Light</option><option value="green" data-i18n="lookGreen">Green</option><option value="icon" data-i18n="lookIcon">Icon only</option></select>
+    </div>
   </section>
+
+  <section class="card">
+    <div class="card-head"><h2 data-i18n="secBackup">Backup</h2><p data-i18n="secBackupSub"></p></div>
+    <div class="setting"><div class="btn-row">
+      <button type="button" id="export" class="ghost" data-i18n="export">Export settings</button>
+      <button type="button" id="import" class="ghost" data-i18n="import">Import settings</button>
+      <button type="button" id="reset" class="danger" data-i18n="reset">Reset to defaults</button>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+    </div></div>
+  </section>
+
   <div class="saved" id="saved" role="status" aria-live="polite"></div>
-  <p class="footnote">Tip: open the Badzy popup and use <b>Quick action</b> to send a normal web URL or a magnet link directly to the app.</p>
+  <p class="footnote" data-i18n="tip"></p>
 </div>
+<script src="i18n.js"></script>
 <script src="options.js"></script>
 </body>
 </html>
