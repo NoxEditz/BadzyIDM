@@ -409,6 +409,7 @@ impl Manager {
             queue_pos: id,
             last_try: None,
             server_time: probe.as_ref().and_then(|p| p.last_modified),
+            etag: probe.as_ref().and_then(|p| p.etag.clone()),
             retry_count: 0,
             pick_quality: req.pick_quality.clone(),
             work_stem: None,
@@ -1274,11 +1275,30 @@ impl Manager {
                 "the address opens a web page, not a file (the link may have expired - use \"Refresh download address\")"
             );
         }
+        let validator_changed = rec.kind == DownloadKind::Http
+            && p.kind == DownloadKind::Http
+            && http::remote_file_changed(
+                rec.etag.as_deref(),
+                rec.server_time.as_ref(),
+                p.etag.as_deref(),
+                p.last_modified.as_ref(),
+            );
         {
             let mut table = segs.lock().unwrap();
             let changed = rec.total_size.is_some() && p.total_size != rec.total_size;
-            if changed || !p.resumable {
+            if changed || !p.resumable || validator_changed {
                 table.clear();
+            }
+        }
+        if validator_changed {
+            // Do not let persisted segment offsets survive a version change.
+            rec.segments.clear();
+            rec.downloaded = 0;
+            rec.parts_total = 0;
+            rec.parts_done = 0;
+            progress.bytes.store(0, Ordering::Relaxed);
+            if let Ok(file) = std::fs::OpenOptions::new().write(true).open(rec.part_path()) {
+                let _ = file.set_len(0);
             }
         }
         // the server only took the request without the browser's cookies /
@@ -1293,6 +1313,7 @@ impl Manager {
         rec.resumable = p.resumable;
         rec.kind = p.kind;
         rec.server_time = p.last_modified.or(rec.server_time);
+        rec.etag = p.etag.clone().or_else(|| rec.etag.clone());
         rec.connections = settings.connections_for(&p.final_url, rec.connections);
         // added without a name (batch, clipboard): use the server's real name
         // and the matching category folder before the first byte is written
@@ -1322,6 +1343,13 @@ impl Manager {
                 x.category = r.category;
                 x.auto_name = false;
                 x.server_time = r.server_time;
+                x.etag = r.etag;
+                if validator_changed {
+                    x.segments.clear();
+                    x.downloaded = 0;
+                    x.parts_total = 0;
+                    x.parts_done = 0;
+                }
                 if x.status == Status::Connecting {
                     x.status = Status::Downloading;
                 }

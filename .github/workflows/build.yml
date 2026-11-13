@@ -58,6 +58,18 @@ jobs:
           "PROFILE=$profile" | Out-File -Append $env:GITHUB_ENV
       - name: Build
         run: cargo build --profile $env:PROFILE -p swiftget
+      - name: Test Rust workspace
+        run: cargo test --workspace --locked
+      - name: Test browser extension
+        shell: pwsh
+        run: |
+          node --check extension/background.js
+          node --check extension/popup.js
+          node --check extension/options.js
+          node --check extension/i18n.js
+          node extension/test/yt-core.test.js
+          node extension/test/i18n.test.js
+          node extension/test/background.sim.js
       # the exe itself, not zipped
       - uses: actions/upload-artifact@v7
         with:
