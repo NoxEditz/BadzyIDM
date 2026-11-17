@@ -1223,6 +1223,21 @@ thread_local! {
     static LAST_API_ADD: RefCell<Option<(String, std::time::Instant)>> = const { RefCell::new(None) };
 }
 
+use swiftget_engine::torrent::is_torrent_web_link;
+
+/// A link to a .torrent file is not a download of its own: the file is
+/// fetched and the torrent window opens with it, where the files are chosen.
+pub(crate) fn open_torrent_link(ctx: &Ctx, url: String, headers: RequestHeaders) {
+    let ctx2 = ctx.clone();
+    ctx.rt.spawn(async move {
+        let result = ctx2.mgr.fetch_torrent_file(&url, &headers).await;
+        let _ = slint::invoke_from_event_loop(move || match result {
+            Ok(path) => torrent_ui::open_source(&path.display().to_string()),
+            Err(e) => message(&tf("Could not get the torrent file: {}", &[&format!("{e:#}")])),
+        });
+    });
+}
+
 /// A request from the browser extension.
 fn handle_api(ui: &Ui, event: api::ApiEvent) {
     match event {
@@ -1255,6 +1270,11 @@ fn handle_api(ui: &Ui, event: api::ApiEvent) {
             // a torrent's magnet link from a page: the torrent window asks first
             if swiftget_engine::torrent::is_magnet(&req.url) {
                 torrent_ui::open_source(&req.url);
+                return;
+            }
+            // a link to a .torrent file: the torrent window, not a download of the file
+            if is_torrent_web_link(&req.url) {
+                open_torrent_link(&ui.ctx, req.url, headers);
                 return;
             }
             // "Refresh download address": this is the new link we waited for
@@ -2072,6 +2092,11 @@ pub(crate) fn open_add_dialog(ctx: &Ctx, url: String, headers: RequestHeaders, n
         torrent_ui::open_source(&url);
         return;
     }
+    // a link to a .torrent file: the torrent window
+    if is_torrent_web_link(&url) {
+        open_torrent_link(ctx, url, headers);
+        return;
+    }
     let Some(d) = ctx.add.upgrade() else { return };
     let s = ctx.mgr.settings();
     if d.window().is_visible() {
@@ -2209,6 +2234,15 @@ fn start_probe(ctx: &Ctx, url: String) {
             }
             d.set_probing(false);
             match result {
+                Ok(p) if p.content_type.as_deref().map(|c| c.to_ascii_lowercase().contains("x-bittorrent")).unwrap_or(false) => {
+                    // the address gives a torrent file (its name does not say so)
+                    let headers = st.headers.clone();
+                    drop(st);
+                    cancel_early(&ctx2);
+                    let _ = d.hide();
+                    open_next(&ctx2);
+                    open_torrent_link(&ctx2, url, headers);
+                }
                 Ok(p) => {
                     if d.get_save_as().as_str() == st.auto_path && !st.auto_path.is_empty() {
                         drop(st);
@@ -2259,6 +2293,15 @@ fn confirm_add(ui: &Ui, start: bool) {
     if !(url.starts_with("http://") || url.starts_with("https://")) || url::Url::parse(&url).is_err() {
         d.set_info(t("Please enter a valid http:// or https:// address").into());
         d.set_info_error(true);
+        return;
+    }
+    // a link to a .torrent file typed or pasted here: the torrent window
+    if is_torrent_web_link(&url) {
+        let headers = ctx.add_state.lock().unwrap().headers.clone();
+        cancel_early(ctx);
+        let _ = d.hide();
+        open_next(ctx);
+        open_torrent_link(ctx, url, headers);
         return;
     }
     let save_as = PathBuf::from(d.get_save_as().trim());

@@ -3,6 +3,8 @@
 ## v0.1 build — 2026-11-13
 
 ### Desktop app
+- **Fixed:** torrents from websites. A link to a `.torrent` file (from the browser extension, Add URL or the clipboard) was handled as a normal download: Badzy showed the small file's details and downloaded only that file. Now the file is fetched and the torrent window opens with its file list, so the real torrent starts. An address that serves a torrent under another name is recognised by its content type.
+- **Fixed:** the "Download File Info" window no longer starts the download by itself before you press Start (the option "Start downloading immediately while showing Download File Info" is now off by default and is switched off once for existing settings; you can turn it on again in Options).
 - Progress window: no more white flash on every update (Windows no longer erases the window or repaints its frame when the title changes), "Show details" works again after "Hide details", and the taskbar progress is only updated when it changes.
 - Frameless windows swallow the caption/frame draw messages, so clicking or dragging the title bar no longer shows the old white minimize / maximize / close boxes.
 - A download hidden to the tray shows the Badzy logo with a progress bar (it was a blue "E").
