@@ -14,7 +14,7 @@
  * problem that is left can be read. When Badzy closes this program, the real
  * aria2 is closed with it (job object).
  *
- * Build: x86_64-w64-mingw32-gcc -O2 -s -static -municode -o aria2c.exe aria2c-wrapper.c
+ * Build: x86_64-w64-mingw32-gcc -O2 -s -static -municode -o aria2c-fix.exe aria2c-wrapper.c
  */
 #define _WIN32_WINNT 0x0601
 #include <windows.h>
